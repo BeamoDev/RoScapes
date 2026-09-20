@@ -376,9 +376,24 @@ test("changed server and client entrypoints compile", function()
 		"src/server/services/DataService.luau",
 		"src/client/ClientMain.local.luau",
 		"src/client/gameplay/ModeFlows.luau",
+		"src/client/effects/ClickBubble.luau",
+		"src/client/panels/AdminPanel.luau",
+		"src/client/ui/GameHudTransitions.luau",
 	}) do
 		assert(luau.compile(fs.readFile(path)))
 	end
+end)
+
+test("client entrypoint keeps local-register headroom", function()
+	local source = fs.readFile("src/client/ClientMain.local.luau")
+	local topLevelLocals = 0
+	for _ in source:gmatch("\nlocal%s+") do
+		topLevelLocals += 1
+	end
+	assert(
+		topLevelLocals <= 180,
+		string.format("ClientMain has %d top-level locals; extract another module", topLevelLocals)
+	)
 end)
 
 print(string.format("%d tests passed", passed))

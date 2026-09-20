@@ -1,6 +1,6 @@
 -- Client main
 
-local Players           = game:GetService("Players")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MarketplaceService = game:GetService("MarketplaceService")
 local ContentProvider = game:GetService("ContentProvider")
@@ -11,7 +11,7 @@ local TextChatService = game:GetService("TextChatService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
-local player    = Players.LocalPlayer
+local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local RemoteRegistry = require(ReplicatedStorage:WaitForChild("Shared").RemoteRegistry)
@@ -23,15 +23,17 @@ local TutorialController = require(script.Parent.controllers.TutorialController)
 local QuestsPanel = require(script.Parent.panels.QuestsPanel)
 local GroupRewardPanel = require(script.Parent.panels.GroupRewardPanel)
 local HomePanels = require(script.Parent.panels.HomePanels)
+local AdminPanel = require(script.Parent.panels.AdminPanel)
 local BonusFx = require(script.Parent.effects.BonusFx)
 
-local UIManager   = require(script.Parent.ui.UIManager)
+local UIManager = require(script.Parent.ui.UIManager)
 local HomeHud = require(script.Parent.ui.HomeHud)
+local GameHudTransitions = require(script.Parent.ui.GameHudTransitions)
 local LevelSelect = require(script.Parent.ui.LevelSelect)
-local GameBoard   = require(script.Parent.ui.GameBoard)
+local GameBoard = require(script.Parent.ui.GameBoard)
 local LetterWheel = require(script.Parent.gameplay.LetterWheel)
 local ModeFlows = require(script.Parent.gameplay.ModeFlows)
-local InputState  = require(script.Parent.core.InputState)
+local InputState = require(script.Parent.core.InputState)
 local ClientBridge = require(script.Parent.core.ClientBridge)
 
 task.spawn(function()
@@ -134,116 +136,41 @@ local function maybePromptFavoriteGame()
 	end
 end
 
-local clickBubbleLayer = nil
-local clickBubbleGui = nil
-
-local function toBubblePosition(input)
-	if not input then
-		return nil
-	end
-	local position = input.Position
-	local point = nil
-	if typeof(position) == "Vector3" then
-		point = Vector2.new(position.X, position.Y)
-	elseif typeof(position) == "Vector2" then
-		point = position
-	end
-	if not point then
-		return nil
-	end
-	return point
-end
-
-local function ensureClickBubbleLayer()
-	if clickBubbleLayer and clickBubbleLayer.Parent then
-		return clickBubbleLayer
-	end
-	if not clickBubbleGui or not clickBubbleGui.Parent then
-		clickBubbleGui = Instance.new("ScreenGui")
-		clickBubbleGui.Name = "ClickBubbleGui"
-		clickBubbleGui.IgnoreGuiInset = true
-		clickBubbleGui.ResetOnSpawn = false
-		clickBubbleGui.DisplayOrder = 10000
-		clickBubbleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-		clickBubbleGui.Parent = playerGui
-	end
-	clickBubbleLayer = Instance.new("Frame")
-	clickBubbleLayer.Name = "ClickBubbleLayer"
-	clickBubbleLayer.BackgroundTransparency = 1
-	clickBubbleLayer.BorderSizePixel = 0
-	clickBubbleLayer.Size = UDim2.fromScale(1, 1)
-	clickBubbleLayer.ZIndex = 1000
-	clickBubbleLayer.Parent = clickBubbleGui
-	return clickBubbleLayer
-end
-
-local function spawnClickBubble(input)
-	if not hud then
-		return
-	end
-	local pos = toBubblePosition(input)
-	if not pos then
-		return
-	end
-	local layer = ensureClickBubbleLayer()
-	local layerTopLeft = layer.AbsolutePosition
-	local bubble = Instance.new("Frame")
-	bubble.Name = "ClickBubble"
-	bubble.AnchorPoint = Vector2.new(0.5, 0.5)
-	bubble.Position = UDim2.fromOffset(pos.X - layerTopLeft.X, pos.Y - layerTopLeft.Y)
-	bubble.Size = UDim2.fromOffset(10, 10)
-	bubble.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	bubble.BackgroundTransparency = 0.45
-	bubble.BorderSizePixel = 0
-	bubble.ZIndex = layer.ZIndex
-	bubble.Parent = layer
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(1, 0)
-	corner.Parent = bubble
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 255, 255)
-	stroke.Thickness = 1
-	stroke.Transparency = 0.3
-	stroke.Parent = bubble
-
-	TweenService:Create(bubble, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.fromOffset(24, 24),
-		BackgroundTransparency = 1,
-	}):Play()
-	TweenService:Create(stroke, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Transparency = 1,
-		Thickness = 2,
-	}):Play()
-
-	task.delay(0.22, function()
-		if bubble and bubble.Parent then
-			bubble:Destroy()
-		end
-	end)
-end
-
 local introLoader = IntroLoader.Create(playerGui)
-local introStartTime = 0
 if not game:IsLoaded() then
 	game.Loaded:Wait()
 end
 RunService.RenderStepped:Wait()
 RunService.RenderStepped:Wait()
 introLoader.BeginLoading()
-introStartTime = os.clock()
 introLoader.SetProgress(0.06, "Preparing interface...")
 
 local PRELOAD_BACKGROUND_IDS = {
 	home = {
-		"85788799350525", "105699786679786", "115444761772173", "81376931726151",
+		"85788799350525",
+		"105699786679786",
+		"115444761772173",
+		"81376931726151",
 	},
 	packs = {
-		"85788799350525", "91785141817679", "115444761772173", "81376931726151", "105699786679786",
-		"134011177418284", "131694469551685", "88170501418837", "105360992331128", "85145996060240",
-		"124778064405452", "84087501777142", "94642764712259", "103542522568208", "89331598575326",
-		"93456390451733", "136727958546302", "103381099115414",
+		"85788799350525",
+		"91785141817679",
+		"115444761772173",
+		"81376931726151",
+		"105699786679786",
+		"134011177418284",
+		"131694469551685",
+		"88170501418837",
+		"105360992331128",
+		"85145996060240",
+		"124778064405452",
+		"84087501777142",
+		"94642764712259",
+		"103542522568208",
+		"89331598575326",
+		"93456390451733",
+		"136727958546302",
+		"103381099115414",
 	},
 }
 
@@ -253,7 +180,9 @@ if not hud then
 end
 
 local function applyMobileHudOverrides()
-	local isTouchOnlyMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled and not UserInputService.GamepadEnabled
+	local isTouchOnlyMobile = UserInputService.TouchEnabled
+		and not UserInputService.KeyboardEnabled
+		and not UserInputService.GamepadEnabled
 	local framesRoot = hud:FindFirstChild("Frames")
 	if framesRoot and framesRoot:IsA("GuiObject") then
 		framesRoot.ClipsDescendants = not isTouchOnlyMobile
@@ -278,16 +207,7 @@ end
 
 applyMobileHudOverrides()
 hud.Enabled = false
-ensureClickBubbleLayer()
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then
-		return
-	end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		spawnClickBubble(input)
-	end
-end)
+require(script.Parent.effects.ClickBubble).Init(playerGui, hud)
 
 local preloadTargets = { hud, ReplicatedStorage:WaitForChild("Shared") }
 local seenPreloadAssets = {}
@@ -355,7 +275,6 @@ local isTimedMode = false
 local isHardcoreMode = false
 local freeplaySessionStreak = 0
 local nextAutoAdvanceToken = 0
-local profilePlaytimeThreadId = 0
 local timedMatchToken = 0
 local timedModeState = nil
 local timedExitPending = false
@@ -371,31 +290,13 @@ local stopHardcoreMode
 local onTutorialWordFound = function() end
 local onTutorialHintUsed = function() end
 local onTutorialArrowModeStarted = function() end
-local onTutorialArrowUsed = function() end
 local playBonusCoinFly = function() end
 local playBonusWordFly = function() end
 local FORCE_TUTORIAL_FOR_TESTING = false
 local tutorialShownThisSession = false
 local tutorialSessionActive = false
-local ADMIN_USER_IDS = {
-	[1790165114] = true,
-	[123315075] = true,
-}
-local ADMIN_ACTIONS = {
-	{ key = "give_coins", title = "Give Coins" },
-	{ key = "give_big_coins", title = "Give Big Coins" },
-	{ key = "give_hints", title = "Give Hints" },
-	{ key = "give_many_hints", title = "Give Many Hints" },
-	{ key = "give_selection_hints", title = "Give Selection Hints" },
-	{ key = "give_many_selection_hints", title = "Give Many Selection Hints" },
-}
 ClientBridge.SetState("IsHardcoreMode", false)
-local lastNotifiedDailyKey = nil
-local lastNotifiedQuestDailyKey = nil
-local lastNotifiedQuestWeeklyKey = nil
 local lastAchievementUnlockedSeen = nil
-local gameHudTargets = nil
-local GAME_HUD_TRANSITION_SLOWDOWN = 3
 local uiState = {
 	motion = require(script.Parent.ui.GuiMotion),
 	homeNotificationCounts = {
@@ -408,8 +309,6 @@ local uiState = {
 		onAccept = nil,
 		onClose = nil,
 	},
-	gameHudBasePositions = {},
-	gameHudBaseSizes = {},
 	renderPvPPanel = nil,
 	cachedDailyPuzzleInfo = nil,
 }
@@ -423,11 +322,15 @@ end
 uiState.hideAnimatedPanel = function(panel)
 	uiState.motion.Hide(panel, uiState.panelMotionTarget(panel))
 end
-local adminPanelCommandRows = {}
-local adminPanelCooldownEnds = {}
-local adminPanelCooldownTokens = {}
-local adminPanelCooldownTweens = {}
-local isAdminUser = ADMIN_USER_IDS[player.UserId] == true
+GameHudTransitions.Init({
+	gameScreen = gameScreen,
+	gameButtons = gameButtons,
+	inGameBar = gameInGameBar,
+	LetterWheel = LetterWheel,
+	setExitPending = function(value)
+		gameExitPending = value == true
+	end,
+})
 uiState.levelDataRequestToken = 0
 -- Ensures only the latest level request can update the active board on the client.
 uiState.requestLevelData = function(packId, levelId, fallbackPackId, fallbackLevelId)
@@ -449,36 +352,6 @@ uiState.requestLevelData = function(packId, levelId, fallbackPackId, fallbackLev
 	return data, "ok"
 end
 
-local function setAdminDebounceIconColor(icon, color)
-	if not (icon and icon:IsA("GuiObject")) then
-		return
-	end
-	if icon:IsA("ImageLabel") or icon:IsA("ImageButton") then
-		icon.ImageColor3 = color
-	else
-		icon.BackgroundColor3 = color
-	end
-end
-
-local function tweenAdminDebounceIconColor(icon, color)
-	if not (icon and icon:IsA("GuiObject")) then
-		return nil
-	end
-	local goal
-	if icon:IsA("ImageLabel") or icon:IsA("ImageButton") then
-		goal = { ImageColor3 = color }
-	else
-		goal = { BackgroundColor3 = color }
-	end
-	local tween = TweenService:Create(
-		icon,
-		TweenInfo.new(1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
-		goal
-	)
-	tween:Play()
-	return tween
-end
-
 uiState.promptSpecialHintPurchase = function(kind, row, col)
 	local prep = RemoteRegistry:GetFunction("PrepareSpecialHintPurchase"):InvokeServer(kind, row, col)
 	if not (prep and prep.success) then
@@ -494,7 +367,8 @@ uiState.promptSpecialHintPurchase = function(kind, row, col)
 		elseif kind == "pvp_hint" then
 			productName = (hintProducts.pvpHint and hintProducts.pvpHint.label) or "1v1 Hint"
 		elseif kind == "daily_pick_hint" then
-			productName = (hintProducts.dailySelectionHint and hintProducts.dailySelectionHint.label) or "Daily Selection Hint"
+			productName = (hintProducts.dailySelectionHint and hintProducts.dailySelectionHint.label)
+				or "Daily Selection Hint"
 		else
 			productName = (hintProducts.dailyHint and hintProducts.dailyHint.label) or "Daily Hint"
 		end
@@ -759,9 +633,13 @@ local function shakeGuiObject(guiObject, originalPosition)
 			if not guiObject.Parent then
 				return
 			end
-			local tween = TweenService:Create(guiObject, TweenInfo.new(stepDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
-				Position = originalPosition + UDim2.fromOffset(offset.X, offset.Y),
-			})
+			local tween = TweenService:Create(
+				guiObject,
+				TweenInfo.new(stepDuration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+				{
+					Position = originalPosition + UDim2.fromOffset(offset.X, offset.Y),
+				}
+			)
 			tween:Play()
 			tween.Completed:Wait()
 		end
@@ -787,8 +665,8 @@ local function playFreeplayStreakAnimation(streakValue, onFinished)
 	local fadeTarget = (streakBackground and streakBackground:IsA("GuiObject")) and streakBackground or streakFrame
 	local baseFadeTransparency = fadeTarget.BackgroundTransparency
 	local baseContainerPos = container.Position
-	local hiddenContainerPos = UDim2.new(0.5, 0, 1.5, 0)
-	local shownContainerPos = UDim2.new(0.5, 0, 0.5, 0)
+	local hiddenContainerPos = UDim2.fromScale(0.5, 1.5)
+	local shownContainerPos = UDim2.fromScale(0.5, 0.5)
 	local holdDuration = 2
 	local animationDuration = 2.95
 
@@ -799,12 +677,14 @@ local function playFreeplayStreakAnimation(streakValue, onFinished)
 		streakAmount.Text = "x" .. tostring(math.max(1, tonumber(streakValue) or 1))
 	end
 
-	local fadeIn = TweenService:Create(fadeTarget, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		BackgroundTransparency = 0.4,
-	})
-	local slideIn = TweenService:Create(container, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Position = shownContainerPos,
-	})
+	local fadeIn =
+		TweenService:Create(fadeTarget, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 0.4,
+		})
+	local slideIn =
+		TweenService:Create(container, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = shownContainerPos,
+		})
 	fadeIn:Play()
 	slideIn:Play()
 
@@ -819,12 +699,14 @@ local function playFreeplayStreakAnimation(streakValue, onFinished)
 		if not streakFrame.Parent or not container.Parent then
 			return
 		end
-		local slideOut = TweenService:Create(container, TweenInfo.new(0.36, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-			Position = hiddenContainerPos,
-		})
-		local fadeOut = TweenService:Create(fadeTarget, TweenInfo.new(0.36, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 1,
-		})
+		local slideOut =
+			TweenService:Create(container, TweenInfo.new(0.36, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				Position = hiddenContainerPos,
+			})
+		local fadeOut =
+			TweenService:Create(fadeTarget, TweenInfo.new(0.36, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				BackgroundTransparency = 1,
+			})
 		slideOut:Play()
 		fadeOut:Play()
 		task.delay(0.4, function()
@@ -985,150 +867,14 @@ local function refreshPlayButtonLevelLabel()
 	end
 end
 
-local function cacheGameHudTargets()
-	if gameHudTargets then
-		return gameHudTargets
-	end
-
-	local wheelRoot = gameScreen and gameScreen:FindFirstChild("WheelRoot")
-	local arrowBtn = (gameButtons and gameButtons:FindFirstChild("Arrow")) or (wheelRoot and wheelRoot:FindFirstChild("Arrow"))
-	local hintBtn = (gameButtons and (gameButtons:FindFirstChild("Hint") or gameButtons:FindFirstChild("HintButton")))
-		or (gameInGameBar and gameInGameBar:FindFirstChild("HintButton"))
-	local shuffleBtn = (gameButtons and gameButtons:FindFirstChild("Shuffle")) or (wheelRoot and wheelRoot:FindFirstChild("Shuffle"))
-	local starBtn = (gameButtons and (gameButtons:FindFirstChild("Star") or gameButtons:FindFirstChild("STAR")))
-		or (wheelRoot and (wheelRoot:FindFirstChild("Star") or wheelRoot:FindFirstChild("STAR")))
-	local returnBtn = (gameButtons and gameButtons:FindFirstChild("Return")) or (gameInGameBar and gameInGameBar:FindFirstChild("Return"))
-	local currencyBtn = (gameButtons and gameButtons:FindFirstChild("Currency")) or (gameScreen and gameScreen:FindFirstChild("Currency"))
-	local levelLabel = gameScreen and gameScreen:FindFirstChild("LevelLabel")
-		or (gameInGameBar and gameInGameBar:FindFirstChild("LevelLabel"))
-
-	gameHudTargets = {
-		wheelRoot = wheelRoot,
-		arrow = arrowBtn,
-		hint = hintBtn,
-		shuffle = shuffleBtn,
-		star = starBtn,
-		returnBtn = returnBtn,
-		currency = currencyBtn,
-		levelLabel = levelLabel,
-	}
-
-	for key, gui in pairs(gameHudTargets) do
-		if gui and gui:IsA("GuiObject") and not uiState.gameHudBasePositions[key] then
-			uiState.gameHudBasePositions[key] = gui.Position
-		end
-		if gui and gui:IsA("GuiObject") and not uiState.gameHudBaseSizes[key] then
-			uiState.gameHudBaseSizes[key] = gui.Size
-		end
-	end
-
-	return gameHudTargets
-end
-
-local function getGameHudHiddenPositions()
-	cacheGameHudTargets()
-	return {
-		wheelRoot = uiState.gameHudBasePositions.wheelRoot,
-		arrow = uiState.gameHudBasePositions.arrow and (uiState.gameHudBasePositions.arrow + UDim2.fromScale(0.5, 0)) or nil,
-		hint = uiState.gameHudBasePositions.hint and (uiState.gameHudBasePositions.hint + UDim2.fromScale(0.5, 0)) or nil,
-		shuffle = uiState.gameHudBasePositions.shuffle and (uiState.gameHudBasePositions.shuffle + UDim2.fromScale(-0.5, 0)) or nil,
-		star = uiState.gameHudBasePositions.star and (uiState.gameHudBasePositions.star + UDim2.fromScale(-0.5, 0)) or nil,
-		returnBtn = uiState.gameHudBasePositions.returnBtn and (uiState.gameHudBasePositions.returnBtn + UDim2.fromScale(0, -0.5)) or nil,
-		currency = uiState.gameHudBasePositions.currency,
-		levelLabel = uiState.gameHudBasePositions.levelLabel and (uiState.gameHudBasePositions.levelLabel + UDim2.fromScale(0, -0.5)) or nil,
-	}
-end
-
-local function setGameHudToHiddenState()
-	local targets = cacheGameHudTargets()
-	local hidden = getGameHudHiddenPositions()
-	for key, gui in pairs(targets) do
-		local hiddenPos = hidden[key]
-		if gui and gui:IsA("GuiObject") and hiddenPos then
-			gui.Position = hiddenPos
-		end
-		if key == "wheelRoot" and gui and gui:IsA("GuiObject") then
-			gui.Visible = false
-			gui.Size = UDim2.new(0, 0, 0, 0)
-		end
-	end
-	if LetterWheel.SetLettersHiddenState then
-		LetterWheel:SetLettersHiddenState()
-	end
-end
-
-local function animateGameHudIn()
-	gameExitPending = false
-	local targets = cacheGameHudTargets()
-	local wheelDuration = 0.28 * GAME_HUD_TRANSITION_SLOWDOWN
-	local uiDuration = 0.32 * GAME_HUD_TRANSITION_SLOWDOWN
-	for key, gui in pairs(targets) do
-		local basePos = uiState.gameHudBasePositions[key]
-		local baseSize = uiState.gameHudBaseSizes[key]
-		if gui and gui:IsA("GuiObject") and basePos then
-			if key == "wheelRoot" then
-				gui.Visible = true
-				TweenService:Create(gui, TweenInfo.new(wheelDuration, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-					Position = basePos,
-					Size = baseSize or gui.Size,
-				}):Play()
-				if LetterWheel.AnimateLettersIn then
-					LetterWheel:AnimateLettersIn(wheelDuration)
-				end
-			else
-				TweenService:Create(gui, TweenInfo.new(uiDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Position = basePos,
-				}):Play()
-			end
-		end
-	end
-end
-
-local function animateGameHudOut(onDone)
-	gameExitPending = true
-	local targets = cacheGameHudTargets()
-	local hidden = getGameHudHiddenPositions()
-	local wheelDuration = 0.22 * GAME_HUD_TRANSITION_SLOWDOWN
-	local uiDuration = 0.3 * GAME_HUD_TRANSITION_SLOWDOWN
-	local longest = math.max(wheelDuration, uiDuration) + 0.04
-	for key, gui in pairs(targets) do
-		local hiddenPos = hidden[key]
-		if gui and gui:IsA("GuiObject") then
-			if key == "wheelRoot" then
-				local collapse = TweenService:Create(gui, TweenInfo.new(wheelDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-					Size = UDim2.new(0, 0, 0, 0),
-				})
-				collapse:Play()
-				if LetterWheel.AnimateLettersOut then
-					LetterWheel:AnimateLettersOut(wheelDuration, true)
-				end
-				task.delay(wheelDuration + 0.02, function()
-					if gui and gui.Parent then
-						gui.Visible = false
-					end
-				end)
-			elseif hiddenPos then
-				TweenService:Create(gui, TweenInfo.new(uiDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-					Position = hiddenPos,
-				}):Play()
-			end
-		end
-	end
-	task.delay(longest, function()
-		if onDone then
-			onDone()
-		end
-	end)
-end
-
 local function showLoadedGameScreen()
-	setGameHudToHiddenState()
+	GameHudTransitions.SetHidden()
 	UIManager:ShowScreen("GameScreen")
-	animateGameHudIn()
+	GameHudTransitions.AnimateIn()
 end
 
 local function transitionGameToLobbyScreen(screenName, onDone)
-	animateGameHudOut(function()
+	GameHudTransitions.AnimateOut(function()
 		GameBoard:ExitLevel()
 		LevelSelect:ShowPackList()
 		applyLobbyScenary()
@@ -1150,7 +896,8 @@ end
 local function updateAssistButtonNotifications()
 	HomeHud.UpdateAssistButtonNotifications()
 	local wheelRoot = gameScreen and gameScreen:FindFirstChild("WheelRoot")
-	local arrowBtn = (gameButtons and gameButtons:FindFirstChild("Arrow")) or (wheelRoot and wheelRoot:FindFirstChild("Arrow"))
+	local arrowBtn = (gameButtons and gameButtons:FindFirstChild("Arrow"))
+		or (wheelRoot and wheelRoot:FindFirstChild("Arrow"))
 	local hintBtn = (gameButtons and (gameButtons:FindFirstChild("Hint") or gameButtons:FindFirstChild("HintButton")))
 		or (gameInGameBar and gameInGameBar:FindFirstChild("HintButton"))
 	local normalHintCoinPrice = 150
@@ -1186,15 +933,12 @@ local function updateAssistButtonNotifications()
 		applyPriceMode(
 			hintBtn,
 			0,
-			MonetizationConfig.HintProducts and MonetizationConfig.HintProducts.pvpHint and MonetizationConfig.HintProducts.pvpHint.robux,
+			MonetizationConfig.HintProducts
+				and MonetizationConfig.HintProducts.pvpHint
+				and MonetizationConfig.HintProducts.pvpHint.robux,
 			true
 		)
-		applyPriceMode(
-			arrowBtn,
-			pvpArrowCoinPrice,
-			0,
-			false
-		)
+		applyPriceMode(arrowBtn, pvpArrowCoinPrice, 0, false)
 	elseif isTimedMode then
 		applyPriceMode(hintBtn, timedHintCoinPrice, 0, false)
 		applyPriceMode(arrowBtn, timedArrowCoinPrice, 0, false)
@@ -1202,7 +946,9 @@ local function updateAssistButtonNotifications()
 		applyPriceMode(
 			hintBtn,
 			0,
-			MonetizationConfig.HintProducts and MonetizationConfig.HintProducts.dailyHint and MonetizationConfig.HintProducts.dailyHint.robux,
+			MonetizationConfig.HintProducts
+				and MonetizationConfig.HintProducts.dailyHint
+				and MonetizationConfig.HintProducts.dailyHint.robux,
 			true
 		)
 		applyPriceMode(arrowBtn, normalArrowCoinPrice, 0, false)
@@ -1493,7 +1239,7 @@ TutorialController.Init({
 	InputState = InputState,
 	GroupRewardPanel = GroupRewardPanel,
 	applyLobbyScenary = applyLobbyScenary,
-	animateGameHudOut = animateGameHudOut,
+	animateGameHudOut = GameHudTransitions.AnimateOut,
 	forceTesting = FORCE_TUTORIAL_FOR_TESTING,
 	forceReplay = TutorialConfig.ShouldReplayForUserId(player.UserId),
 	tutorialCompleted = tutorialCompleted,
@@ -1529,248 +1275,6 @@ local function setDailyPuzzleButtonState(completed)
 	end
 end
 
-local function getAdminPanelParts()
-	if not frames then
-		return nil
-	end
-	local panel = frames:FindFirstChild("AdminPanel")
-	if not panel then
-		return nil
-	end
-	local frameRoot = panel:FindFirstChild("Frame") or panel
-	local scroll = frameRoot and frameRoot:FindFirstChild("Scroll")
-	local template = frameRoot and frameRoot:FindFirstChild("Template")
-	local playerFrame = frameRoot and frameRoot:FindFirstChild("PlayerFrame")
-	local playerScroll = playerFrame and playerFrame:FindFirstChild("Scroll")
-	local playerTemplate = playerFrame and playerFrame:FindFirstChild("PlayerTemplate")
-	return panel, frameRoot, scroll, template, playerFrame, playerScroll, playerTemplate
-end
-
-local function formatAdminCooldown(seconds)
-	local total = math.max(0, math.ceil(tonumber(seconds) or 0))
-	local mins = math.floor(total / 60)
-	local secs = total % 60
-	return string.format("%d:%02d", mins, secs)
-end
-
-local function refreshAdminCommandRow(actionKey)
-	local row = adminPanelCommandRows[actionKey]
-	if not (row and row.Parent) then
-		return
-	end
-	local button = row:FindFirstChild("Button", true)
-	local debounceFrame = row:FindFirstChild("Debounce", true)
-	local debounceIcon = debounceFrame and debounceFrame:FindFirstChild("Icon", true)
-	local debounceTitle = debounceFrame and debounceFrame:FindFirstChild("Title", true)
-	local debounceButton = debounceFrame and debounceFrame:FindFirstChild("Button", true)
-	local remaining = math.max(0, math.ceil((adminPanelCooldownEnds[actionKey] or 0) - os.clock()))
-	local active = remaining > 0
-
-	if button and button:IsA("GuiButton") then
-		button.Active = not active
-		button.AutoButtonColor = not active
-		button.BackgroundColor3 = active and Color3.fromRGB(120, 120, 120) or Color3.fromRGB(0, 255, 60)
-	end
-	if debounceFrame and debounceFrame:IsA("GuiObject") then
-		debounceFrame.Visible = active
-	end
-	if debounceIcon and debounceIcon:IsA("GuiObject") and not active then
-		if adminPanelCooldownTweens[actionKey] then
-			adminPanelCooldownTweens[actionKey]:Cancel()
-			adminPanelCooldownTweens[actionKey] = nil
-		end
-		local existingGradient = debounceIcon:FindFirstChildOfClass("UIGradient")
-		if existingGradient then
-			existingGradient:Destroy()
-		end
-		setAdminDebounceIconColor(debounceIcon, Color3.fromRGB(0, 255, 60))
-	end
-	if debounceTitle and debounceTitle:IsA("TextLabel") then
-		debounceTitle.Text = active and ("Ready in " .. formatAdminCooldown(remaining)) or ""
-	end
-	if debounceButton and debounceButton:IsA("GuiButton") then
-		debounceButton.Active = false
-		debounceButton.AutoButtonColor = false
-		debounceButton.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
-	end
-end
-
-local function startAdminCommandCooldown(actionKey, duration)
-	local cooldownDuration = 3
-	adminPanelCooldownEnds[actionKey] = os.clock() + cooldownDuration
-	adminPanelCooldownTokens[actionKey] = (adminPanelCooldownTokens[actionKey] or 0) + 1
-	local token = adminPanelCooldownTokens[actionKey]
-	local row = adminPanelCommandRows[actionKey]
-	local debounceFrame = row and row:FindFirstChild("Debounce", true)
-	local debounceIcon = debounceFrame and debounceFrame:FindFirstChild("Icon", true)
-	if debounceIcon and debounceIcon:IsA("GuiObject") then
-		local existingGradient = debounceIcon:FindFirstChildOfClass("UIGradient")
-		if existingGradient then
-			existingGradient:Destroy()
-		end
-		if adminPanelCooldownTweens[actionKey] then
-			adminPanelCooldownTweens[actionKey]:Cancel()
-		end
-		setAdminDebounceIconColor(debounceIcon, Color3.fromRGB(255, 80, 80))
-	end
-	task.spawn(function()
-		while adminPanelCooldownTokens[actionKey] == token do
-			local remaining = math.max(0, math.ceil((adminPanelCooldownEnds[actionKey] or 0) - os.clock()))
-			if debounceIcon and debounceIcon:IsA("GuiObject") then
-				local targetColor
-				if remaining > 20 then
-					targetColor = Color3.fromRGB(255, 80, 80)
-				elseif remaining > 10 then
-					targetColor = Color3.fromRGB(255, 215, 70)
-				else
-					targetColor = Color3.fromRGB(0, 255, 60)
-				end
-				if adminPanelCooldownTweens[actionKey] then
-					adminPanelCooldownTweens[actionKey]:Cancel()
-					adminPanelCooldownTweens[actionKey] = nil
-				end
-				adminPanelCooldownTweens[actionKey] = tweenAdminDebounceIconColor(debounceIcon, targetColor)
-			end
-			refreshAdminCommandRow(actionKey)
-			if (adminPanelCooldownEnds[actionKey] or 0) <= os.clock() then
-				adminPanelCooldownEnds[actionKey] = nil
-				if adminPanelCooldownTweens[actionKey] then
-					adminPanelCooldownTweens[actionKey]:Cancel()
-					adminPanelCooldownTweens[actionKey] = nil
-				end
-				refreshAdminCommandRow(actionKey)
-				break
-			end
-			task.wait(1)
-		end
-	end)
-end
-
-local function openAdminPlayerPicker(actionDef)
-	local panel, _, _, _, playerFrame, playerScroll, playerTemplate = getAdminPanelParts()
-	if not (panel and playerFrame and playerScroll and playerTemplate) then
-		return
-	end
-	uiState.showAnimatedPanel(playerFrame)
-
-	local closeBtn = playerFrame:FindFirstChild("Close")
-	if closeBtn and closeBtn:IsA("GuiButton") and not closeBtn:GetAttribute("Wired") then
-		closeBtn:SetAttribute("Wired", true)
-		closeBtn.MouseButton1Click:Connect(function()
-			uiState.hideAnimatedPanel(playerFrame)
-		end)
-	end
-
-	for _, child in ipairs(playerScroll:GetChildren()) do
-		if child ~= playerTemplate and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-			child:Destroy()
-		end
-	end
-	playerTemplate.Visible = false
-
-	local playerList = RemoteRegistry:GetFunction("GetAdminPlayers"):InvokeServer() or {}
-	for _, info in ipairs(playerList) do
-		local row = playerTemplate:Clone()
-		row.Name = "AdminPlayer_" .. tostring(info.userId)
-		row.Visible = true
-		row.Parent = playerScroll
-
-		local mugshot = row:FindFirstChild("Mugshot", true)
-		local label = row:FindFirstChild("Label", true)
-		local actionBtn = row:FindFirstChildWhichIsA("GuiButton", true)
-		if label and label:IsA("TextLabel") then
-			label.Text = tostring(info.name or "Player")
-		end
-		uiState.setPlayerImageAsync(mugshot, info.userId)
-
-		if actionBtn and actionBtn:IsA("GuiButton") then
-			actionBtn.MouseButton1Click:Connect(function()
-				actionBtn.Active = false
-				actionBtn.AutoButtonColor = false
-				local result = RemoteRegistry:GetFunction("RunAdminAction"):InvokeServer(actionDef.key, info.userId)
-				if result and result.success then
-					uiState.hideAnimatedPanel(playerFrame)
-					startAdminCommandCooldown(actionDef.key, result.cooldownRemaining or 30)
-					UIManager:ShowAlert((result.message or "Done") .. " -> " .. tostring(result.targetName or info.name or "Player"), "success")
-				else
-					actionBtn.Active = true
-					actionBtn.AutoButtonColor = true
-					if result and tonumber(result.cooldownRemaining) and tonumber(result.cooldownRemaining) > 0 then
-						startAdminCommandCooldown(actionDef.key, result.cooldownRemaining)
-					end
-					UIManager:ShowAlert((result and result.message) or "Admin action failed", "error")
-				end
-			end)
-		end
-	end
-end
-
-local function openAdminPanel()
-	if not isAdminUser then
-		return
-	end
-	local panel, frameRoot, scroll, template, playerFrame = getAdminPanelParts()
-	if not (panel and scroll and template) then
-		return
-	end
-
-	local closeBtn = frameRoot and frameRoot:FindFirstChild("Close", true)
-	if closeBtn and closeBtn:IsA("GuiButton") and not closeBtn:GetAttribute("Wired") then
-		closeBtn:SetAttribute("Wired", true)
-		closeBtn.MouseButton1Click:Connect(function()
-			uiState.hideAnimatedPanel(panel)
-			if playerFrame then
-				uiState.hideAnimatedPanel(playerFrame)
-			end
-		end)
-	end
-
-	for _, child in ipairs(scroll:GetChildren()) do
-		if child ~= template and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-			child:Destroy()
-		end
-	end
-	template.Visible = false
-	adminPanelCommandRows = {}
-
-	for _, actionDef in ipairs(ADMIN_ACTIONS) do
-		local row = template:Clone()
-		row.Name = "AdminAction_" .. actionDef.key
-		row.Visible = true
-		row.Parent = scroll
-		adminPanelCommandRows[actionDef.key] = row
-
-		local title = row:FindFirstChild("Title", true)
-		local button = row:FindFirstChild("Button", true)
-		local debounceFrame = row:FindFirstChild("Debounce", true)
-		if title and title:IsA("TextLabel") then
-			title.Text = actionDef.title
-		end
-		if debounceFrame and debounceFrame:IsA("GuiObject") then
-			debounceFrame.Visible = false
-		end
-		if button and button:IsA("GuiButton") then
-			button.BackgroundColor3 = Color3.fromRGB(0, 255, 60)
-			button.Active = true
-			button.AutoButtonColor = true
-			button.MouseButton1Click:Connect(function()
-				if (adminPanelCooldownEnds[actionDef.key] or 0) > os.clock() then
-					return
-				end
-				openAdminPlayerPicker(actionDef)
-			end)
-		end
-		refreshAdminCommandRow(actionDef.key)
-	end
-
-	if playerFrame then
-		playerFrame.Visible = false
-	end
-	HomePanels.CloseAllPanels(panel)
-	uiState.showAnimatedPanel(panel)
-end
-
-
 local function pollHomeNotificationSources()
 	applyHomeNotificationBadges()
 
@@ -1797,8 +1301,6 @@ local function pollHomeNotificationSources()
 		end
 	end
 	if dailyInfo and dailyInfo.canClaim then
-		local dailyKey = tostring(dayStampNow())
-		lastNotifiedDailyKey = dailyKey
 		setHomeNotificationCount("daily", 1)
 	else
 		setHomeNotificationCount("daily", 0)
@@ -1825,14 +1327,8 @@ local function pollHomeNotificationSources()
 		return key, claimable
 	end
 
-	local dailyKey, dailyClaimable = checkQuest("daily")
-	local weeklyKey, weeklyClaimable = checkQuest("weekly")
-	if dailyClaimable > 0 and dailyKey ~= nil then
-		lastNotifiedQuestDailyKey = dailyKey
-	end
-	if weeklyClaimable > 0 and weeklyKey ~= nil then
-		lastNotifiedQuestWeeklyKey = weeklyKey
-	end
+	local _, dailyClaimable = checkQuest("daily")
+	local _, weeklyClaimable = checkQuest("weekly")
 	setHomeNotificationCount("quests", dailyClaimable + weeklyClaimable)
 
 	local achievementsBoard = HomePanels.GetCachedAchievementsBoard and HomePanels.GetCachedAchievementsBoard() or nil
@@ -1913,26 +1409,57 @@ ModeFlows.Init({
 	onCoinsUpdated = function(coins)
 		ClientBridge.Call("OnCoinsUpdated", coins)
 	end,
-	getIsPvPMatch = function() return isPvPMatch end,
-	setIsPvPMatch = function(v) isPvPMatch = v end,
-	getIsDailyPuzzleMode = function() return isDailyPuzzleMode end,
-	setIsDailyPuzzleMode = function(v) isDailyPuzzleMode = v end,
-	getIsTimedMode = function() return isTimedMode end,
-	setIsTimedMode = function(v) isTimedMode = v end,
-	getIsHardcoreMode = function() return isHardcoreMode end,
-	setIsHardcoreMode = function(v) isHardcoreMode = v end,
-	getTimedMatchToken = function() return timedMatchToken end,
-	setTimedMatchToken = function(v) timedMatchToken = v end,
-	getTimedModeState = function() return timedModeState end,
-	setTimedModeState = function(v) timedModeState = v end,
-	setTimedExitPending = function(v) timedExitPending = v == true end,
-	getHardcoreState = function() return hardcoreState end,
-	setHardcoreState = function(v) hardcoreState = v end,
+	getIsPvPMatch = function()
+		return isPvPMatch
+	end,
+	setIsPvPMatch = function(v)
+		isPvPMatch = v
+	end,
+	getIsDailyPuzzleMode = function()
+		return isDailyPuzzleMode
+	end,
+	setIsDailyPuzzleMode = function(v)
+		isDailyPuzzleMode = v
+	end,
+	getIsTimedMode = function()
+		return isTimedMode
+	end,
+	setIsTimedMode = function(v)
+		isTimedMode = v
+	end,
+	getIsHardcoreMode = function()
+		return isHardcoreMode
+	end,
+	setIsHardcoreMode = function(v)
+		isHardcoreMode = v
+	end,
+	getTimedMatchToken = function()
+		return timedMatchToken
+	end,
+	setTimedMatchToken = function(v)
+		timedMatchToken = v
+	end,
+	getTimedModeState = function()
+		return timedModeState
+	end,
+	setTimedModeState = function(v)
+		timedModeState = v
+	end,
+	setTimedExitPending = function(v)
+		timedExitPending = v == true
+	end,
+	getHardcoreState = function()
+		return hardcoreState
+	end,
+	setHardcoreState = function(v)
+		hardcoreState = v
+	end,
 })
 
 local function bindInGameHintButton(gameButtonsRef, inGameBarRef)
-	local hintBtn = (gameButtonsRef and (gameButtonsRef:FindFirstChild("Hint") or gameButtonsRef:FindFirstChild("HintButton")))
-		or (inGameBarRef and inGameBarRef:FindFirstChild("HintButton"))
+	local hintBtn = (
+		gameButtonsRef and (gameButtonsRef:FindFirstChild("Hint") or gameButtonsRef:FindFirstChild("HintButton"))
+	) or (inGameBarRef and inGameBarRef:FindFirstChild("HintButton"))
 	if not hintBtn or not hintBtn:IsA("GuiButton") then
 		return
 	end
@@ -2017,10 +1544,11 @@ local function bindInGameHintButton(gameButtonsRef, inGameBarRef)
 			while button.Parent and button:GetAttribute("HintSelectionPulseActive") == true do
 				stroke.Thickness = 0
 				stroke.Transparency = 0.55
-				local pulse = TweenService:Create(stroke, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-					Thickness = 5,
-					Transparency = 1,
-				})
+				local pulse =
+					TweenService:Create(stroke, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+						Thickness = 5,
+						Transparency = 1,
+					})
 				pulse:Play()
 				pulse.Completed:Wait()
 				if button:GetAttribute("HintSelectionPulseActive") ~= true then
@@ -2125,7 +1653,8 @@ local function bindInGameHintButton(gameButtonsRef, inGameBarRef)
 		end
 		if hintSelectionCoins and hintSelectionCoins:IsA("GuiButton") then
 			hintSelectionCoins.MouseButton1Click:Connect(function()
-				local success = RemoteRegistry:GetFunction("BuyHintsWithCoins"):InvokeServer(1, activeHintSelectionConfig.coinCost)
+				local success = RemoteRegistry:GetFunction("BuyHintsWithCoins")
+					:InvokeServer(1, activeHintSelectionConfig.coinCost)
 				if success then
 					UIEffects.PlaySound("Purchase")
 					closeHintSelection()
@@ -2215,7 +1744,8 @@ local function bindInGameButtons(gameScreenRef)
 		gameCurrencyBtn.MouseButton1Click:Connect(openShopPanel)
 	end
 
-	local backBtn = (gameButtonsRef and gameButtonsRef:FindFirstChild("Return")) or (inGameBarRef and inGameBarRef:FindFirstChild("Return"))
+	local backBtn = (gameButtonsRef and gameButtonsRef:FindFirstChild("Return"))
+		or (inGameBarRef and inGameBarRef:FindFirstChild("Return"))
 	if backBtn and backBtn:IsA("GuiButton") and not backBtn:GetAttribute("Wired") then
 		backBtn:SetAttribute("Wired", true)
 		backBtn.MouseButton1Click:Connect(function()
@@ -2263,15 +1793,6 @@ local function bindInGameButtons(gameScreenRef)
 	end
 
 	bindInGameHintButton(gameButtonsRef, inGameBarRef)
-end
-
-local function playErrorSfx()
-	local soundService = game:GetService("SoundService")
-	local sfxFolder = soundService and soundService:FindFirstChild("SFX")
-	local errorSound = sfxFolder and sfxFolder:FindFirstChild("Error")
-	if errorSound and errorSound:IsA("Sound") then
-		errorSound:Play()
-	end
 end
 
 local function handleWordFound(result)
@@ -2332,6 +1853,17 @@ uiState.setPlayerImageAsync = function(imageLabel, userId)
 		end
 	end)
 end
+
+AdminPanel.Init({
+	player = player,
+	frames = frames,
+	RemoteRegistry = RemoteRegistry,
+	UIManager = UIManager,
+	HomePanels = HomePanels,
+	showPanel = uiState.showAnimatedPanel,
+	hidePanel = uiState.hideAnimatedPanel,
+	setPlayerImageAsync = uiState.setPlayerImageAsync,
+})
 
 uiState.ensureListPadding = function(container, paddingOffset)
 	if not container then
@@ -2435,7 +1967,9 @@ local function addPvPInviteRow(content, template, inviterUserId, invite)
 	local mugshot = row:FindFirstChild("Mugshot", true)
 	local acceptBtn = row:FindFirstChild("Accept", true)
 	local denyBtn = row:FindFirstChild("Deny", true)
-	local barBg = row:FindFirstChild("TimedBar", true) or row:FindFirstChild("BarBG", true) or row:FindFirstChild("Bar", true)
+	local barBg = row:FindFirstChild("TimedBar", true)
+		or row:FindFirstChild("BarBG", true)
+		or row:FindFirstChild("Bar", true)
 	local fill = barBg and barBg:FindFirstChild("Fill", true)
 	local timerLabel = row:FindFirstChild("Timer", true)
 	local expiresAt = tonumber(invite.expiresAt) or 0
@@ -2447,14 +1981,14 @@ local function addPvPInviteRow(content, template, inviterUserId, invite)
 	uiState.setPlayerImageAsync(mugshot, inviterUserId)
 
 	if fill and fill:IsA("GuiObject") then
-		fill.Size = UDim2.new(0, 0, 1, 0)
+		fill.Size = UDim2.fromScale(0, 1)
 		local duration = math.max(0, expiresAt - os.clock())
 		if duration > 0 then
 			TweenService:Create(fill, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
-				Size = UDim2.new(1, 0, 1, 0),
+				Size = UDim2.fromScale(1, 1),
 			}):Play()
 		else
-			fill.Size = UDim2.new(1, 0, 1, 0)
+			fill.Size = UDim2.fromScale(1, 1)
 		end
 	end
 
@@ -2638,14 +2172,6 @@ local function requestNextTimedPuzzle()
 	return ModeFlows.RequestNextTimedPuzzle()
 end
 
-local function startTimedMode(payload)
-	ModeFlows.StartTimedMode(payload)
-end
-
-local function startHardcoreMode(payload)
-	ModeFlows.StartHardcoreMode(payload)
-end
-
 stopHardcoreMode = function(goToLobby)
 	ModeFlows.StopHardcoreMode(goToLobby)
 end
@@ -2678,10 +2204,6 @@ onTutorialArrowModeStarted = function()
 	end
 end
 
-onTutorialArrowUsed = function()
-	TutorialController.OnArrowUsed()
-end
-
 cancelOnboardingTutorial = function()
 	tutorialToken += 1
 	tutorialSessionActive = false
@@ -2696,7 +2218,9 @@ ClientBridge.SetCallback("OnTutorialCompletedClient", function()
 end)
 
 uiState.ensurePvPFrame = function()
-	if not frames then return nil end
+	if not frames then
+		return nil
+	end
 	if not pvpFrame then
 		pvpFrame = frames:FindFirstChild("PlayerList") or frames:FindFirstChild("PvPPanel")
 	end
@@ -2717,7 +2241,9 @@ end
 
 uiState.renderPvPPanel = function()
 	local panel = uiState.ensurePvPFrame()
-	if not panel then return end
+	if not panel then
+		return
+	end
 	pruneExpiredPvPInvites()
 	local frameRoot = panel:FindFirstChild("Frame") or panel
 	local content = getPvPPanelContentRoot(panel)
@@ -2866,7 +2392,8 @@ local function wireHomeScreen()
 	local adminBtn = btns:FindFirstChild("Admin")
 	local shopBtn = btns:FindFirstChild("Shop")
 	local currencyBtn = btns:FindFirstChild("Currency")
-	local achievementsBtn = (btns and btns:FindFirstChild("Achievements")) or (homeScreen and homeScreen:FindFirstChild("Achievements", true))
+	local achievementsBtn = (btns and btns:FindFirstChild("Achievements"))
+		or (homeScreen and homeScreen:FindFirstChild("Achievements", true))
 	local videoAdBtn = btns:FindFirstChild("VideoAd")
 	local dailyMainBtn = btns:FindFirstChild("Daily")
 	local questsMainBtn = btns:FindFirstChild("Quests")
@@ -2890,22 +2417,22 @@ local function wireHomeScreen()
 	refreshModeLocks(playerData.rank)
 	refreshPlayButtonLevelLabel()
 	if adminBtn and adminBtn:IsA("GuiObject") then
-		adminBtn.Visible = isAdminUser
+		adminBtn.Visible = AdminPanel.IsAdmin()
 	end
 
-		if playBtn and playBtn:IsA("GuiButton") and not playBtn:GetAttribute("Wired") then
-			playBtn:SetAttribute("Wired", true)
-			playBtn.MouseButton1Click:Connect(function()
-				local packId, levelId = findNextPlayableLevel()
-				packId = tonumber(packId) or tonumber(playerData.lastPack) or 1
-				levelId = tonumber(levelId) or tonumber(playerData.lastLevel) or 1
-				local data, requestStatus = uiState.requestLevelData(packId, levelId, 1, 1)
-				if requestStatus == "stale" then
-					return
-				end
-				uiState.startLevelFromData(data)
-			end)
-		end
+	if playBtn and playBtn:IsA("GuiButton") and not playBtn:GetAttribute("Wired") then
+		playBtn:SetAttribute("Wired", true)
+		playBtn.MouseButton1Click:Connect(function()
+			local packId, levelId = findNextPlayableLevel()
+			packId = tonumber(packId) or tonumber(playerData.lastPack) or 1
+			levelId = tonumber(levelId) or tonumber(playerData.lastLevel) or 1
+			local data, requestStatus = uiState.requestLevelData(packId, levelId, 1, 1)
+			if requestStatus == "stale" then
+				return
+			end
+			uiState.startLevelFromData(data)
+		end)
+	end
 	if levelsBtn and levelsBtn:IsA("GuiButton") and not levelsBtn:GetAttribute("Wired") then
 		levelsBtn:SetAttribute("Wired", true)
 		levelsBtn.MouseButton1Click:Connect(function()
@@ -2936,7 +2463,7 @@ local function wireHomeScreen()
 	end
 	if adminBtn and adminBtn:IsA("GuiButton") and not adminBtn:GetAttribute("Wired") then
 		adminBtn:SetAttribute("Wired", true)
-		adminBtn.MouseButton1Click:Connect(openAdminPanel)
+		adminBtn.MouseButton1Click:Connect(AdminPanel.Open)
 	end
 	if dailyTopBtn and dailyTopBtn:IsA("GuiButton") and not dailyTopBtn:GetAttribute("Wired") then
 		dailyTopBtn:SetAttribute("Wired", true)
@@ -3013,14 +2540,10 @@ local function wireHomeScreen()
 	if hardcoreBtn and hardcoreBtn:IsA("GuiButton") and not hardcoreBtn:GetAttribute("Wired") then
 		hardcoreBtn:SetAttribute("Wired", true)
 		hardcoreBtn.MouseButton1Click:Connect(function()
-			openGeneralInfo(
-				"Coming soon!",
-				"Hardcore mode is coming soon.",
-				{
-					showAccept = true,
-					acceptText = "Okay",
-				}
-			)
+			openGeneralInfo("Coming soon!", "Hardcore mode is coming soon.", {
+				showAccept = true,
+				acceptText = "Okay",
+			})
 		end)
 	end
 
@@ -3077,7 +2600,10 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(userId, gameP
 	if userId ~= player.UserId or purchased ~= true then
 		return
 	end
-	local premiumPassId = MonetizationConfig.Passes and MonetizationConfig.Passes.premium and tonumber(MonetizationConfig.Passes.premium.id) or 0
+	local premiumPassId = MonetizationConfig.Passes
+			and MonetizationConfig.Passes.premium
+			and tonumber(MonetizationConfig.Passes.premium.id)
+		or 0
 	if premiumPassId > 0 and tonumber(gamePassId) == premiumPassId then
 		playerData.premiumOwned = true
 		if LevelSelect.SetPremiumOwned then
@@ -3087,7 +2613,7 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(userId, gameP
 	end
 end)
 
-	LevelSelect:OnLevelChosen(function(packId, levelId)
+LevelSelect:OnLevelChosen(function(packId, levelId)
 	local data, requestStatus = uiState.requestLevelData(packId, levelId)
 	if requestStatus == "stale" then
 		return
@@ -3117,7 +2643,6 @@ end)
 	showLoadedGameScreen()
 	beginOnboardingTutorial(data)
 end)
-
 
 uiState.startPvPMatch = function(payload)
 	local data = payload and payload.levelData
@@ -3201,7 +2726,6 @@ RemoteRegistry:GetEvent("PvPInviteReceived").OnClientEvent:Connect(function(info
 		end
 	end
 end)
-
 
 RemoteRegistry:GetEvent("PvPInviteStatus").OnClientEvent:Connect(function(info)
 	local status = info and info.status
@@ -3290,8 +2814,14 @@ RemoteRegistry:GetEvent("LevelComplete").OnClientEvent:Connect(function(info)
 	local completedPackId = tonumber(info and info.packId) or 0
 	if completedPackId == -1 then
 		freeplaySessionStreak += 1
-		updateProfileRowValue("current_freeplay_streak", tostring(info.stats and info.stats.currentFreeplayStreak or freeplaySessionStreak))
-		updateProfileRowValue("best_freeplay_streak", tostring(info.stats and info.stats.highestFreeplayStreak or freeplaySessionStreak))
+		updateProfileRowValue(
+			"current_freeplay_streak",
+			tostring(info.stats and info.stats.currentFreeplayStreak or freeplaySessionStreak)
+		)
+		updateProfileRowValue(
+			"best_freeplay_streak",
+			tostring(info.stats and info.stats.highestFreeplayStreak or freeplaySessionStreak)
+		)
 	else
 		resetFreeplaySessionStreak()
 	end
@@ -3340,7 +2870,10 @@ RemoteRegistry:GetEvent("LevelComplete").OnClientEvent:Connect(function(info)
 	local previousSkillLevel = math.clamp(math.floor(tonumber(playerData.skill and playerData.skill.level) or 1), 1, 5)
 	if info.skill then
 		playerData.skill = info.skill
-		updateProfileRowValue("skill_level", string.format("%d / 5", math.clamp(math.floor(tonumber(info.skill.level) or 1), 1, 5)))
+		updateProfileRowValue(
+			"skill_level",
+			string.format("%d / 5", math.clamp(math.floor(tonumber(info.skill.level) or 1), 1, 5))
+		)
 		updateProfileRowValue("skill_score", string.format("%.2f / 100", tonumber(info.skill.score) or 0))
 		updateProfileRowValue("skill_recent_levels", tostring(tonumber(info.skill.recentLevelsTracked) or 0))
 		local nextSkillLevel = math.clamp(math.floor(tonumber(info.skill.level) or 1), 1, 5)
@@ -3419,7 +2952,6 @@ RemoteRegistry:GetEvent("RankUpdated").OnClientEvent:Connect(function(payload)
 	end
 end)
 
-
 if bonusWordsFrame then
 	uiState.bonusWordsCloseButton = (bonusWordsFrame:FindFirstChild("Frame") or bonusWordsFrame):FindFirstChild("Close")
 	if uiState.bonusWordsCloseButton and uiState.bonusWordsCloseButton:IsA("GuiButton") then
@@ -3430,7 +2962,7 @@ if bonusWordsFrame then
 	bonusWordsFrame.Visible = false
 end
 
-ClientBridge.SetCallback("OnLevelComplete", function(info)
+ClientBridge.SetCallback("OnLevelComplete", function(_info)
 	if tutorialSessionActive then
 		return
 	end
@@ -3440,7 +2972,7 @@ ClientBridge.SetCallback("OnLevelComplete", function(info)
 	-- GameBoard calls this after completion/fall sequence finishes.
 	InputState:SetEnabled(false)
 	local autoAdvanceToken = ClientBridge.GetState("PendingAutoAdvanceToken")
-	animateGameHudOut(function()
+	GameHudTransitions.AnimateOut(function()
 		task.delay(1, function()
 			if tutorialSessionActive or isTimedMode or isHardcoreMode or isDailyPuzzleMode or isPvPMatch then
 				return
@@ -3482,7 +3014,7 @@ ClientBridge.SetCallback("LoadNextLevel", function(expectedAutoAdvanceToken)
 		end
 		if nextData then
 			GameBoard:LoadLevel(nextData)
-			setGameHudToHiddenState()
+			GameHudTransitions.SetHidden()
 			clearGuessedBonusWords()
 			if bonusWordsFrame then
 				bonusWordsFrame.Visible = false
@@ -3491,7 +3023,7 @@ ClientBridge.SetCallback("LoadNextLevel", function(expectedAutoAdvanceToken)
 			updateAssistButtonNotifications()
 			LetterWheel:LoadLevel(nextData)
 			applyGameScenaryForPack(nextData and nextData.packId)
-			animateGameHudIn()
+			GameHudTransitions.AnimateIn()
 			InputState:SetEnabled(true)
 			success = true
 		end
@@ -3504,7 +3036,7 @@ ClientBridge.SetCallback("LoadNextLevel", function(expectedAutoAdvanceToken)
 			end
 			if nextData then
 				GameBoard:LoadLevel(nextData)
-				setGameHudToHiddenState()
+				GameHudTransitions.SetHidden()
 				clearGuessedBonusWords()
 				if bonusWordsFrame then
 					bonusWordsFrame.Visible = false
@@ -3513,7 +3045,7 @@ ClientBridge.SetCallback("LoadNextLevel", function(expectedAutoAdvanceToken)
 				updateAssistButtonNotifications()
 				LetterWheel:LoadLevel(nextData)
 				applyGameScenaryForPack(nextData and nextData.packId)
-				animateGameHudIn()
+				GameHudTransitions.AnimateIn()
 				InputState:SetEnabled(true)
 				success = true
 			end
@@ -3603,13 +3135,13 @@ task.spawn(function()
 	end
 end)
 
-	uiState.findTutorialLevelData = function()
-		local data, requestStatus = uiState.requestLevelData(1, 5)
-		if requestStatus == "stale" then
-			return nil
-		end
-		return data
+uiState.findTutorialLevelData = function()
+	local data, requestStatus = uiState.requestLevelData(1, 5)
+	if requestStatus == "stale" then
+		return nil
 	end
+	return data
+end
 
 task.delay(0.2, function()
 	if tutorialShownThisSession then
