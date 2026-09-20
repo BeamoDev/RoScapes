@@ -16,6 +16,9 @@ RemoteRegistry.EnsureRemotes()
 
 -- Load services
 local DataService  = require(Server.services.DataService)
+local PurchaseRewards = require(Server.services.PurchaseRewards)
+local ReceiptProcessor = require(Server.services.ReceiptProcessor)
+local TimedRewards = require(Server.services.TimedRewards)
 local LevelService = require(Server.services.LevelService)
 local GameService  = require(Server.services.GameService)
 local DailyPuzzleService = require(Server.services.DailyPuzzleService)
@@ -41,7 +44,7 @@ local AUTOSAVE_WRITE_SPACING_SECONDS = 0.2
 local AUTOSAVE_RETRY_BASE_SECONDS = 15
 local AUTOSAVE_RETRY_MAX_SECONDS = 180
 local AUTOSAVE_STARTUP_JITTER_SECONDS = 30
-local AUTOSAVE_REQUEST_TYPE = Enum.DataStoreRequestType.SetIncrementAsync
+local AUTOSAVE_REQUEST_TYPE = Enum.DataStoreRequestType.UpdateAsync
 local PVP_INVITE_EXPIRE_SECONDS = 60
 local PVP_INVITE_RESEND_COOLDOWN = 8
 local ADMIN_ACTION_COOLDOWN = 30
@@ -889,7 +892,9 @@ Players.PlayerAdded:Connect(function(player)
 	autosaveFailureCountByPlayer[player.UserId] = 0
 	scheduleNextAutosave(player, AUTOSAVE_INTERVAL_SECONDS, true)
 	bindCharacterAnchor(player)
-	DataService.loadPlayerData(player)
+	if not DataService.loadPlayerData(player) then
+		return
+	end
 	grantExistingGroupRewardIfEligible(player)
 	task.spawn(function()
 		playerOwnsPremiumPass(player)
@@ -935,12 +940,30 @@ Players.PlayerRemoving:Connect(function(player)
 		dirtyLeaderboardUsers[player.UserId] = nil
 	end
 
-	savePlayerDataGuarded(player, "player removing", {
-		waitForInFlight = true,
-		waitTimeoutSeconds = 4,
-	})
+	DataService.releasePlayerData(player)
 	saveInFlightByPlayer[player.UserId] = nil
-	DataService.clearPlayerData(player)
+end)
+
+game:BindToClose(function()
+	local remaining = 0
+	local playersToSave = {}
+	for _, player in ipairs(DataService.getLoadedPlayers()) do
+		playersToSave[player] = true
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		playersToSave[player] = true
+	end
+	for player in pairs(playersToSave) do
+		remaining += 1
+		task.spawn(function()
+			DataService.releasePlayerData(player)
+			remaining -= 1
+		end)
+	end
+	local deadline = os.clock() + 27
+	while remaining > 0 and os.clock() < deadline do
+		task.wait(0.1)
+	end
 end)
 
 -- Load data for anyone already in-game (Studio testing)
@@ -952,7 +975,9 @@ for _, player in Players:GetPlayers() do
 		autosaveFailureCountByPlayer[player.UserId] = 0
 		scheduleNextAutosave(player, AUTOSAVE_INTERVAL_SECONDS, true)
 		bindCharacterAnchor(player)
-		DataService.loadPlayerData(player)
+		if not DataService.loadPlayerData(player) then
+			return
+		end
 		grantExistingGroupRewardIfEligible(player)
 		playerOwnsPremiumPass(player)
 		BadgeAwardService.AwardWelcome(player)
@@ -1430,18 +1455,14 @@ RemoteRegistry:GetFunction("GetTimedModeLevel").OnServerInvoke = function(player
 	}
 end
 
-RemoteRegistry:GetFunction("FinishTimedMode").OnServerInvoke = function(player, didWin, _reportedSolvedCount)
+RemoteRegistry:GetFunction("FinishTimedMode").OnServerInvoke = function(player)
 	local active = timedMatchByPlayer[player.UserId]
 	if not active then
 		return { success = false, message = "no active timed mode", reward = 0, solvedCount = 0, coins = DataService.getCoins(player) }
 	end
 
 	timedMatchByPlayer[player.UserId] = nil
-	local solvedCount = math.max(0, tonumber(active.solvedCount) or 0)
-	local reward = solvedCount * 13
-	if didWin == true and solvedCount > 0 then
-		reward += math.max(0, tonumber(active.rewardCoins) or 0)
-	end
+	local reward, solvedCount = TimedRewards.Calculate(active)
 	reward = select(1, applyRankedCoinReward(player, reward))
 		if reward > 0 then
 			DataService.addCoins(player, reward, "TimedModeReward", "Reward")
@@ -1538,6 +1559,11 @@ RemoteRegistry:GetEvent("SubmitWord").OnServerEvent:Connect(function(player, wor
 		return
 	end
 	
+	local timedAtSubmission = getTimedMatch(player)
+	if timedAtSubmission and os.time() >= timedAtSubmission.expiresAt then
+		return
+	end
+
 	-- Get authoritative level data from server
 	local authLevelData = getActiveLevelData(player, session)
 	if not authLevelData then
@@ -1832,6 +1858,7 @@ RemoteRegistry:GetFunction("PrepareSpecialHintPurchase").OnServerInvoke = functi
 			kind = key,
 			productId = tonumber(product.id),
 			createdAt = os.time(),
+			session = session,
 		}
 		return { success = true, productId = tonumber(product.id) }
 	end
@@ -1849,6 +1876,7 @@ RemoteRegistry:GetFunction("PrepareSpecialHintPurchase").OnServerInvoke = functi
 			kind = key,
 			productId = tonumber(product.id),
 			createdAt = os.time(),
+			session = session,
 		}
 		return { success = true, productId = tonumber(product.id) }
 	end
@@ -1865,6 +1893,7 @@ RemoteRegistry:GetFunction("PrepareSpecialHintPurchase").OnServerInvoke = functi
 			kind = key,
 			productId = tonumber(product.id),
 			createdAt = os.time(),
+			session = session,
 		}
 		return { success = true, productId = tonumber(product.id) }
 	end
@@ -1892,6 +1921,7 @@ RemoteRegistry:GetFunction("PrepareSpecialHintPurchase").OnServerInvoke = functi
 			row = rr,
 			col = cc,
 			createdAt = os.time(),
+			session = session,
 		}
 		return { success = true, productId = tonumber(product.id) }
 	end
@@ -2158,26 +2188,10 @@ RemoteRegistry:GetFunction("GetLeaderboard").OnServerInvoke = function(_player, 
 end
 
 
-local HINT_PRODUCTS = {}
-local COIN_PRODUCTS = {}
 local PRODUCT_WEBHOOK_INFO = {}
-local SINGLE_HINT_PRODUCT_ID = MonetizationConfig.HintProducts
-	and ((MonetizationConfig.HintProducts.singleHint and tonumber(MonetizationConfig.HintProducts.singleHint.id))
-		or (MonetizationConfig.HintProducts.dailyHint and tonumber(MonetizationConfig.HintProducts.dailyHint.id)))
-	or 0
-local QUICK_RESCUE_PRODUCT_ID = MonetizationConfig.HintProducts
-	and MonetizationConfig.HintProducts.quickRescue
-	and tonumber(MonetizationConfig.HintProducts.quickRescue.id)
-	or 0
-local SUPER_BUNDLE_PRODUCT_ID = MonetizationConfig.HintProducts
-	and MonetizationConfig.HintProducts.superBundle
-	and tonumber(MonetizationConfig.HintProducts.superBundle.id)
-	or 0
-
 for _, product in ipairs(MonetizationConfig.CoinProducts or {}) do
 	local productId = tonumber(product and product.id) or 0
 	if productId > 0 then
-		COIN_PRODUCTS[productId] = tonumber(product.coins) or 0
 		PRODUCT_WEBHOOK_INFO[productId] = {
 			title = "Coins Purchased",
 			label = tostring(product.label or "Coins"),
@@ -2189,7 +2203,6 @@ end
 for _, key in ipairs({ "hints10", "hints100" }) do
 	local product = MonetizationConfig.HintProducts and MonetizationConfig.HintProducts[key]
 	if product and (tonumber(product.id) or 0) > 0 then
-		HINT_PRODUCTS[tonumber(product.id)] = tonumber(product.amount) or 0
 		PRODUCT_WEBHOOK_INFO[tonumber(product.id)] = {
 			title = "Hints Purchased",
 			label = tostring(product.label or "Hints"),
@@ -2277,107 +2290,52 @@ local function notifyDevProductPurchased(player, productId)
 	end
 end
 
+local receiptProcessor = ReceiptProcessor.new({
+	findPlayer = function(userId)
+		return Players:GetPlayerByUserId(userId)
+	end,
+	resolveReward = function(productId)
+		return PurchaseRewards.Resolve(MonetizationConfig, productId)
+	end,
+	processPurchase = DataService.processPurchase,
+	onGranted = function(player, info, reward)
+		local pending = pendingSpecialHintPurchaseByPlayer[player.UserId]
+		if reward.special and pending and pending.productId == info.ProductId then
+			pendingSpecialHintPurchaseByPlayer[player.UserId] = nil
+			-- First persist a refundable inventory hint. Only redeem it on the original board.
+			if player.Parent == Players and GameService.GetSession(player.UserId) == pending.session
+				and DataService.getHints(player) > 0 then
+				local revealed = false
+				if pending.kind == "pvp_row_hint" then
+					revealed = grantPvPRowHint(player)
+				elseif pending.kind == "pvp_hint" then
+					revealed = grantPvPCellHint(player)
+				elseif pending.kind == "daily_hint" then
+					revealed = grantDailyCellHint(player)
+				elseif pending.kind == "daily_pick_hint" then
+					revealed = grantDailySelectedCellHint(player, pending.row, pending.col)
+				end
+				if revealed then
+					DataService.useHint(player)
+					DataService.savePlayerData(player)
+				end
+			end
+		end
+		if player.Parent == Players then
+			RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
+			RemoteRegistry:GetEvent("UpdateSelectionHints"):FireClient(player, DataService.getSelectionHints(player))
+			RemoteRegistry:GetEvent("UpdateCoins"):FireClient(player, DataService.getCoins(player))
+			notifyDevProductPurchased(player, info.ProductId)
+			DataService.logPurchaseEconomyEvent(player, info.ProductId, reward)
+		end
+		sendPurchaseWebhook(player, info.ProductId)
+	end,
+})
+
 MarketplaceService.ProcessReceipt = function(info)
-	local player = Players:GetPlayerByUserId(info.PlayerId)
-	if not player then
-		return Enum.ProductPurchaseDecision.NotProcessedYet
-	end
-
-	local amount = HINT_PRODUCTS[info.ProductId]
-	if amount then
-		DataService.addHints(player, amount)
-		RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-		notifyDevProductPurchased(player, info.ProductId)
-		sendPurchaseWebhook(player, info.ProductId)
+	if receiptProcessor:Process(info) then
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
-
-	local pending = pendingSpecialHintPurchaseByPlayer[player.UserId]
-	if pending and pending.productId == info.ProductId then
-		pendingSpecialHintPurchaseByPlayer[player.UserId] = nil
-		if pending.kind == "pvp_row_hint" then
-			if not grantPvPRowHint(player) then
-				DataService.addHints(player, 1)
-				RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-			end
-			notifyDevProductPurchased(player, info.ProductId)
-			sendPurchaseWebhook(player, info.ProductId)
-			return Enum.ProductPurchaseDecision.PurchaseGranted
-		end
-		if pending.kind == "pvp_hint" then
-			if not grantPvPCellHint(player) then
-				DataService.addHints(player, 1)
-				RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-			end
-			notifyDevProductPurchased(player, info.ProductId)
-			sendPurchaseWebhook(player, info.ProductId)
-			return Enum.ProductPurchaseDecision.PurchaseGranted
-		end
-		if pending.kind == "daily_hint" then
-			if not grantDailyCellHint(player) then
-				DataService.addHints(player, 1)
-				RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-			end
-			notifyDevProductPurchased(player, info.ProductId)
-			sendPurchaseWebhook(player, info.ProductId)
-			return Enum.ProductPurchaseDecision.PurchaseGranted
-		end
-		if pending.kind == "daily_pick_hint" then
-			if not grantDailySelectedCellHint(player, pending.row, pending.col) then
-				DataService.addHints(player, 1)
-				RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-			end
-			notifyDevProductPurchased(player, info.ProductId)
-			sendPurchaseWebhook(player, info.ProductId)
-			return Enum.ProductPurchaseDecision.PurchaseGranted
-		end
-	end
-
-	if SINGLE_HINT_PRODUCT_ID > 0 and info.ProductId == SINGLE_HINT_PRODUCT_ID then
-		DataService.addHints(player, 1)
-		RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-		notifyDevProductPurchased(player, info.ProductId)
-		sendPurchaseWebhook(player, info.ProductId, {
-			title = "Hints Purchased",
-			label = "1 Hint",
-			details = "1 hint",
-		})
-		return Enum.ProductPurchaseDecision.PurchaseGranted
-	end
-
-	if QUICK_RESCUE_PRODUCT_ID > 0 and info.ProductId == QUICK_RESCUE_PRODUCT_ID then
-		local bundle = MonetizationConfig.HintProducts and MonetizationConfig.HintProducts.quickRescue or {}
-		DataService.addHints(player, tonumber(bundle.hints) or 0)
-		DataService.addCoins(player, tonumber(bundle.coins) or 0, "QuickRescue", "IAP")
-		RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-		RemoteRegistry:GetEvent("UpdateCoins"):FireClient(player, DataService.getCoins(player))
-		notifyDevProductPurchased(player, info.ProductId)
-		sendPurchaseWebhook(player, info.ProductId)
-		return Enum.ProductPurchaseDecision.PurchaseGranted
-	end
-
-	if SUPER_BUNDLE_PRODUCT_ID > 0 and info.ProductId == SUPER_BUNDLE_PRODUCT_ID then
-		local bundle = MonetizationConfig.HintProducts and MonetizationConfig.HintProducts.superBundle or {}
-		DataService.addHints(player, tonumber(bundle.hints) or 0)
-		DataService.addSelectionHints(player, tonumber(bundle.selectionHints) or 0)
-		DataService.addCoins(player, tonumber(bundle.coins) or 0, "SuperBundle", "IAP")
-		RemoteRegistry:GetEvent("UpdateHints"):FireClient(player, DataService.getHints(player))
-		RemoteRegistry:GetEvent("UpdateSelectionHints"):FireClient(player, DataService.getSelectionHints(player))
-		RemoteRegistry:GetEvent("UpdateCoins"):FireClient(player, DataService.getCoins(player))
-		notifyDevProductPurchased(player, info.ProductId)
-		sendPurchaseWebhook(player, info.ProductId)
-		return Enum.ProductPurchaseDecision.PurchaseGranted
-	end
-
-	local coins = COIN_PRODUCTS[info.ProductId]
-	if coins then
-		DataService.addCoins(player, coins, "CoinBundle_" .. tostring(info.ProductId), "IAP")
-		RemoteRegistry:GetEvent("UpdateCoins"):FireClient(player, DataService.getCoins(player))
-		notifyDevProductPurchased(player, info.ProductId)
-		sendPurchaseWebhook(player, info.ProductId)
-		return Enum.ProductPurchaseDecision.PurchaseGranted
-	end
-
 	return Enum.ProductPurchaseDecision.NotProcessedYet
 end
 

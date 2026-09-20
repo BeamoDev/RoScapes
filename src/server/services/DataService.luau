@@ -8,6 +8,8 @@ local DataStoreService = game:GetService("DataStoreService")
 local HttpService = game:GetService("HttpService")
 local AnalyticsService = game:GetService("AnalyticsService")
 local RankService = require(script.Parent.RankService)
+local ProfilePersistence = require(script.Parent.ProfilePersistence)
+local PurchaseRewards = require(script.Parent.PurchaseRewards)
 
 local PlayerStore = DataStoreService:GetDataStore("Wordscapes_v2")
 local SKILL_HISTORY_LIMIT = 12
@@ -171,6 +173,8 @@ local function defaultData()
 		groupReward = false,
 		favoritePromptShown = false,
 
+		-- Server-only receipt history; never mirrored to the client or pruned.
+		processedReceipts = {},
 		progress = {},
 		stats = {
 			currentStreak = 0,
@@ -284,6 +288,12 @@ local function defaultData()
 end
 
 local cache = {}
+local loadedPlayers = {}
+local loading = {}
+local closing = {}
+local releasing = {}
+local durableReceipts = {}
+local pendingReceipts = {}
 local leaderboardSuppressionCacheByUserId = {}
 local LEADERBOARD_SUPPRESSION_CACHE_TTL_SECONDS = 120
 
@@ -422,6 +432,10 @@ local function stripDeprecatedKeys(data)
 		return data
 	end
 
+	if data.processedReceipts == nil then
+		data.processedReceipts = {}
+	end
+	assert(typeof(data.processedReceipts) == "table", "Invalid receipt history")
 	data.bonusFound = nil
 	data.achievements = data.achievements or { unlocked = {}, claimed = {} }
 	data.achievements.claimed = data.achievements.claimed or {}
@@ -1057,36 +1071,73 @@ local function syncFromPlayer(player, data)
 
 end
 
+local persistence = ProfilePersistence.new(PlayerStore,
+	function(value) return HttpService:JSONEncode(value) end,
+	decodeStoredPlayerData,
+	defaultData,
+	os.time,
+	function() return HttpService:GenerateGUID(false) end
+)
+
 function DataService.loadPlayerData(player)
 	local userId = player.UserId
+	while loading[userId] or releasing[userId] or closing[userId] do
+		if not player.Parent then
+			return nil
+		end
+		task.wait(0.1)
+	end
 	if cache[userId] then
 		return cache[userId]
 	end
-
-	local ok, saved = pcall(function()
-		return PlayerStore:GetAsync(tostring(userId))
-	end)
-
-	local data
-	if ok and saved then
-		local decoded = decodeStoredPlayerData(saved, userId)
-		if decoded then
-			data = deepMergeDefaults(decoded, defaultData())
-		else
-			data = defaultData()
+	loading[userId] = true
+	local loaded, reason
+	for attempt = 1, 4 do
+		loaded, reason = persistence:Load(userId)
+		if loaded then
+			break
 		end
-	else
-		data = defaultData()
+		if not player.Parent then
+			break
+		end
+		task.wait(attempt)
 	end
-	data = stripDeprecatedKeys(data)
-
+	if not loaded then
+		loading[userId] = nil
+		persistence:Forget(userId)
+		warn(string.format("[DataService] Cannot load %d safely: %s", userId, tostring(reason)))
+		player:Kick("Your data could not be loaded safely. Please rejoin shortly.")
+		return nil
+	end
+	if not player.Parent or closing[userId] then
+		persistence:Save(userId, loaded, true)
+		persistence:Forget(userId)
+		loading[userId] = nil
+		closing[userId] = nil
+		return nil
+	end
+	local ok, data = pcall(function()
+		return stripDeprecatedKeys(deepMergeDefaults(loaded, defaultData()))
+	end)
+	if not ok then
+		persistence:Save(userId, loaded, true)
+		persistence:Forget(userId)
+		loading[userId] = nil
+		player:Kick("Your data could not be loaded safely. Please contact the developer.")
+		return nil
+	end
+	closing[userId] = nil
 	cache[userId] = data
+	loadedPlayers[userId] = player
+	loading[userId] = nil
+	durableReceipts[userId] = table.clone(data.processedReceipts)
+	pendingReceipts[userId] = {}
 	setLeaderboardSuppressionCache(userId, data.moderation and data.moderation.leaderboardSuppressed == true)
 	applyToPlayer(player, data)
 	return data
 end
 
-function DataService.savePlayerData(player)
+function DataService.savePlayerData(player, release)
 	if not player then
 		return false, "invalid player"
 	end
@@ -1095,30 +1146,109 @@ function DataService.savePlayerData(player)
 	if not data then
 		return false, "no cached data"
 	end
-
-	syncFromPlayer(player, data)
-	stripDeprecatedKeys(data)
-
-	local encodeOk, encoded = pcall(function()
-		return HttpService:JSONEncode(data)
+	local ok, snapshot = pcall(function()
+		syncFromPlayer(player, data)
+		stripDeprecatedKeys(data)
+		return HttpService:JSONDecode(HttpService:JSONEncode(data))
 	end)
-	if not encodeOk then
-		warn(string.format("[DataService] Failed to encode player data for %s (%d): %s", player.Name, userId, tostring(encoded)))
-		return false, tostring(encoded)
+	if not ok then
+		return false, tostring(snapshot)
 	end
+	local saved, reason = persistence:Save(userId, snapshot, release)
+	if saved then
+		-- Only receipts in this exact saved snapshot are durable.
+		durableReceipts[userId] = table.clone(snapshot.processedReceipts)
+	else
+		warn(string.format("[DataService] Save failed for %d: %s", userId, tostring(reason)))
+		if reason == "profile ownership lost" then
+			closing[userId] = true
+			player:Kick("Your data session moved to another server. Please rejoin.")
+		end
+	end
+	return saved, reason
+end
 
-	local saveOk, saveErr = pcall(function()
-		PlayerStore:SetAsync(tostring(userId), encoded)
-	end)
-	if not saveOk then
-		warn(string.format("[DataService] Failed to save player data for %s (%d): %s", player.Name, userId, tostring(saveErr)))
-		return false, tostring(saveErr)
+function DataService.processPurchase(player, info, reward)
+	local userId = player.UserId
+	local data = cache[userId]
+	if not data or closing[userId] then
+		return false, false
 	end
-	return true
+	local purchaseId = tostring(info.PurchaseId or "")
+	if purchaseId == "" then
+		return false, false
+	end
+	if durableReceipts[userId][purchaseId] then
+		local newlyGranted = pendingReceipts[userId][purchaseId] == true
+		pendingReceipts[userId][purchaseId] = nil
+		return true, newlyGranted
+	end
+	if PurchaseRewards.Stage(data, purchaseId, info.ProductId, reward) then
+		pendingReceipts[userId][purchaseId] = true
+		applyToPlayer(player, data)
+	end
+	local saved = DataService.savePlayerData(player)
+	if not saved or cache[userId] ~= data then
+		return false, false
+	end
+	local newlyGranted = pendingReceipts[userId][purchaseId] == true
+	pendingReceipts[userId][purchaseId] = nil
+	return true, newlyGranted
+end
+
+function DataService.logPurchaseEconomyEvent(player, productId, reward)
+	local data = cache[player.UserId]
+	local coins = tonumber(reward.coins) or 0
+	if data and coins > 0 then
+		logCoinEconomyEvent(player, Enum.AnalyticsEconomyFlowType.Source, coins, data.coins, "IAP", "Product_" .. tostring(productId))
+	end
+end
+
+function DataService.releasePlayerData(player)
+	local userId = player.UserId
+	closing[userId] = true
+	local deadline = os.clock() + 25
+	while loading[userId] and os.clock() < deadline do
+		task.wait(0.1)
+	end
+	if loading[userId] then
+		-- The in-flight loader will release its own lease when it returns.
+		return
+	end
+	if releasing[userId] then
+		while releasing[userId] and os.clock() < deadline do
+			task.wait(0.1)
+		end
+		return
+	end
+	releasing[userId] = true
+	repeat
+		local saved, reason = DataService.savePlayerData(player, true)
+		if saved or reason == "no cached data" or reason == "no writable session" or reason == "profile ownership lost" then
+			break
+		end
+		task.wait(0.5)
+	until os.clock() >= deadline
+	DataService.clearPlayerData(player)
+	releasing[userId] = nil
 end
 
 function DataService.clearPlayerData(player)
-	cache[player.UserId] = nil
+	local userId = player.UserId
+	cache[userId] = nil
+	loadedPlayers[userId] = nil
+	closing[userId] = nil
+	durableReceipts[userId] = nil
+	pendingReceipts[userId] = nil
+	persistence:Forget(userId)
+end
+
+function DataService.getLoadedPlayers()
+	local players = {}
+	for _, player in pairs(loadedPlayers) do
+		table.insert(players, player)
+	end
+	return players
 end
 
 function DataService.getData(player)

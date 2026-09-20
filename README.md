@@ -39,6 +39,8 @@ Set the URLs privately and copy the module alongside `ModerationConfig` in the s
 
 With Selene installed, run `selene src`. After restoring the original animations at the owner's request, Selene 0.31.0 reports one error, zero parse errors, and 145 warnings. The error is the original Play-button animation's `Instance.new("Vector2Value")` call. Gameplay and UI verification require the existing place in Studio.
 
+Run `lune run tests/purchases.luau` with Lune 0.10.2 for the purchase persistence and timed reward regression tests. These run the production modules against a simulated datastore and player tree, including failed writes, duplicate receipts, and competing server sessions. See [purchase reliability and deployment](docs/purchase-reliability.md) before applying these changes to Studio.
+
 ## Git
 
 The remote is `https://github.com/BeamoDev/RoScapes.git`, with `main` as the working branch. Use `git status` and `git diff` to review changes before committing and pushing. Keep private configuration excluded.

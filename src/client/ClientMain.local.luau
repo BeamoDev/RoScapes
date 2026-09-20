@@ -2221,7 +2221,7 @@ local function bindInGameButtons(gameScreenRef)
 				end
 				gameExitPending = true
 				timedExitPending = true
-				local resp = RemoteRegistry:GetFunction("FinishTimedMode"):InvokeServer(false, timedModeState and timedModeState.solvedCount)
+				local resp = RemoteRegistry:GetFunction("FinishTimedMode"):InvokeServer()
 				finishTimedToLobby(resp and resp.reward, resp and resp.coins, resp and resp.solvedCount)
 				return
 			end

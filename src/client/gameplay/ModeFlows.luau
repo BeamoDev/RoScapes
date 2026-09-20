@@ -45,8 +45,7 @@ local function requestNextTimedPuzzle()
 		return true
 	end
 	if resp and resp.expired then
-		local timedModeState = state.getTimedModeState()
-		local endResp = state.RemoteRegistry:GetFunction("FinishTimedMode"):InvokeServer(false, timedModeState and timedModeState.solvedCount)
+		local endResp = state.RemoteRegistry:GetFunction("FinishTimedMode"):InvokeServer()
 		ModeFlows.FinishTimedToLobby(endResp and endResp.reward, endResp and endResp.coins, endResp and endResp.solvedCount)
 		return false
 	end
@@ -98,7 +97,7 @@ local function runTimedModeCountdown()
 			end
 			if remaining <= 0 then
 				state.InputState:SetEnabled(false)
-				local resp = state.RemoteRegistry:GetFunction("FinishTimedMode"):InvokeServer(false, activeState and activeState.solvedCount)
+				local resp = state.RemoteRegistry:GetFunction("FinishTimedMode"):InvokeServer()
 				ModeFlows.FinishTimedToLobby(resp and resp.reward, resp and resp.coins, resp and resp.solvedCount)
 				return
 			end
