@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UIEffects = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("util"):WaitForChild("UIEffects"))
+local GuiMotion = require(script.Parent.Parent.ui.GuiMotion)
 
 local QuestsPanel = {}
 
@@ -29,6 +30,16 @@ local function ensurePanel()
 		return panel
 	end
 	return nil
+end
+
+local function hidePanel(panel)
+	local inner = panel and panel:FindFirstChild("Frame")
+	GuiMotion.Hide(panel, (inner and inner:IsA("GuiObject")) and inner or panel)
+end
+
+local function showPanel(panel)
+	local inner = panel and panel:FindFirstChild("Frame")
+	GuiMotion.Show(panel, (inner and inner:IsA("GuiObject")) and inner or panel)
 end
 
 local function getQuestPanelParts(panel)
@@ -353,7 +364,7 @@ function QuestsPanel.Open()
 		panel:SetAttribute("Wired", true)
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				hidePanel(panel)
 			end)
 		end
 		if claimBtn and claimBtn:IsA("GuiButton") then
@@ -375,7 +386,7 @@ function QuestsPanel.Open()
 
 	setPeriod(state.currentQuestPeriod)
 	refreshQuestBoard()
-	panel.Visible = true
+	showPanel(panel)
 	if frame ~= panel and frame:IsA("GuiObject") then
 		frame.Visible = true
 	end

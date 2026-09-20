@@ -8,6 +8,8 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UIEffects = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("util"):WaitForChild("UIEffects"))
 local ClientBridge = require(script.Parent.Parent.core.ClientBridge)
+local CoinCounter = require(script.Parent.CoinCounter)
+local GuiMotion = require(script.Parent.GuiMotion)
 
 local UIManager = {}
 
@@ -333,22 +335,21 @@ function UIManager:RegisterScreen(name, frame)
 end
 
 function UIManager:ShowScreen(name)
-	if currentScreen == name then
-		return
-	end
-
-	if currentScreen and screens[currentScreen] then
-		screens[currentScreen].Visible = false
-	end
-
-	currentScreen = name
 	local frame = screens[name]
 	if not frame then
 		warn("[UIManager] Unknown screen:", name)
 		return
 	end
+	if currentScreen == name and frame.Visible then
+		return
+	end
 
-	frame.Visible = true
+	if currentScreen and screens[currentScreen] then
+		GuiMotion.Hide(screens[currentScreen])
+	end
+
+	currentScreen = name
+	GuiMotion.Show(frame)
 
 	if onShowCallbacks[name] then
 		onShowCallbacks[name]()
@@ -699,7 +700,7 @@ function UIManager:ShowHintShop()
 
 	local function refreshBalance()
 		hintsLabel.Text = "Hints: " .. formatInt(readCurrency("Hints"))
-		coinsLabel.Text = "Coins: " .. formatInt(readCurrency("Coins"))
+		CoinCounter.Set(coinsLabel, readCurrency("Coins"), { prefix = "Coins: " })
 	end
 	refreshBalance()
 
@@ -944,7 +945,7 @@ function UIManager:ShowLeaderboard()
 		panel:SetAttribute("LeaderboardWired", true)
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				GuiMotion.Hide(panel, frameRoot)
 			end)
 		end
 		if solvesToggle and solvesToggle:IsA("GuiButton") then
@@ -961,7 +962,7 @@ function UIManager:ShowLeaderboard()
 
 	template.Visible = false
 	styleToggle("solves")
-	panel.Visible = true
+	GuiMotion.Show(panel, frameRoot)
 	refreshData()
 
 	local refreshToken = (tonumber(panel:GetAttribute("LeaderboardRefreshToken")) or 0) + 1

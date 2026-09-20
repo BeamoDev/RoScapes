@@ -3,6 +3,8 @@ local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local UIEffects = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("util"):WaitForChild("UIEffects"))
+local CoinCounter = require(script.Parent.Parent.ui.CoinCounter)
+local GuiMotion = require(script.Parent.Parent.ui.GuiMotion)
 
 local HomePanels = {}
 
@@ -210,9 +212,26 @@ local function updateProfileRowValue(key, amountText)
 	end
 	local amount = row:FindFirstChild("Amount", true)
 	if amount and amount:IsA("TextLabel") then
-		amount.Text = nextValue
+		if key == "coins" then
+			CoinCounter.Set(amount, tonumber(amountText) or 0)
+		else
+			amount.Text = nextValue
+		end
 	end
 	state.profileLastValues[key] = nextValue
+end
+
+local function panelMotionTarget(panel)
+	local inner = panel and panel:FindFirstChild("Frame")
+	return (inner and inner:IsA("GuiObject")) and inner or panel
+end
+
+local function showPanel(panel)
+	GuiMotion.Show(panel, panelMotionTarget(panel))
+end
+
+local function hidePanel(panel, onComplete)
+	GuiMotion.Hide(panel, panelMotionTarget(panel), onComplete)
 end
 
 local function closeAllPanels(exceptPanel)
@@ -222,7 +241,7 @@ local function closeAllPanels(exceptPanel)
 	end
 	for _, child in ipairs(frames:GetChildren()) do
 		if child ~= exceptPanel and child:IsA("GuiObject") then
-			child.Visible = false
+			hidePanel(child)
 		end
 	end
 end
@@ -394,7 +413,7 @@ function HomePanels.OpenGeneralInfo(titleText, subtitleText, options)
 		panel:SetAttribute("Wired", true)
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				hidePanel(panel)
 				local cb = state.generalInfoState.onClose
 				state.generalInfoState.onClose = nil
 				state.generalInfoState.onAccept = nil
@@ -405,7 +424,7 @@ function HomePanels.OpenGeneralInfo(titleText, subtitleText, options)
 		end
 		if acceptBtn and acceptBtn:IsA("GuiButton") then
 			acceptBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				hidePanel(panel)
 				local cb = state.generalInfoState.onAccept
 				state.generalInfoState.onClose = nil
 				state.generalInfoState.onAccept = nil
@@ -416,7 +435,7 @@ function HomePanels.OpenGeneralInfo(titleText, subtitleText, options)
 		end
 	end
 
-	panel.Visible = true
+	showPanel(panel)
 end
 
 function HomePanels.UpdateProfileRowValue(key, amountText)
@@ -629,7 +648,7 @@ local function updateNextRewardText(info)
 		panel:SetAttribute("Wired", true)
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				hidePanel(panel)
 				state.rewardsRefreshThreadId += 1
 			end)
 		end
@@ -656,7 +675,7 @@ local function updateNextRewardText(info)
 	end
 
 	refreshRewards()
-	panel.Visible = true
+	showPanel(panel)
 	state.rewardsRefreshThreadId += 1
 	local threadId = state.rewardsRefreshThreadId
 	task.spawn(function()
@@ -744,7 +763,7 @@ function HomePanels.OpenShop()
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
 				stopShopCardPulseRuntime(panel)
-				panel.Visible = false
+				hidePanel(panel)
 			end)
 		end
 		if quickRescuePurchase and quickRescuePurchase:IsA("GuiButton") then
@@ -764,7 +783,7 @@ function HomePanels.OpenShop()
 		end
 	end
 
-	panel.Visible = true
+	showPanel(panel)
 	if frame ~= panel and frame:IsA("GuiObject") then
 		frame.Visible = true
 	end
@@ -820,7 +839,7 @@ function HomePanels.OpenSettings()
 		panel:SetAttribute("Wired", true)
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				hidePanel(panel)
 			end)
 		end
 		if musicToggle and musicToggle:IsA("GuiButton") then
@@ -846,7 +865,7 @@ function HomePanels.OpenSettings()
 	applySfxEnabled(state.playerData.sfxEnabled ~= false)
 	paintToggle(musicToggle, state.playerData.musicEnabled ~= false)
 	paintToggle(sfxToggle, state.playerData.sfxEnabled ~= false)
-	panel.Visible = true
+	showPanel(panel)
 	if frame ~= panel and frame:IsA("GuiObject") then
 		frame.Visible = true
 	end
@@ -912,7 +931,11 @@ function HomePanels.OpenProfile()
 			title.Text = tostring(titleText)
 		end
 		if amount and amount:IsA("TextLabel") and state.profileLastValues[key] ~= nextValue then
-			amount.Text = nextValue
+			if key == "coins" then
+				CoinCounter.Set(amount, tonumber(amountText) or 0)
+			else
+				amount.Text = nextValue
+			end
 		end
 		if highlight and highlight:IsA("GuiObject") then
 			highlight.BackgroundColor3 = color
@@ -1034,12 +1057,12 @@ function HomePanels.OpenProfile()
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
 				state.profilePlaytimeThreadId += 1
-				panel.Visible = false
+				hidePanel(panel)
 			end)
 		end
 	end
 
-	panel.Visible = true
+	showPanel(panel)
 	refreshProfile()
 end
 
@@ -1072,7 +1095,7 @@ function HomePanels.OpenAchievements()
 		panel:SetAttribute("Wired", true)
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				hidePanel(panel)
 			end)
 		end
 	end
@@ -1194,7 +1217,7 @@ function HomePanels.OpenAchievements()
 			end)
 		end
 	end
-	panel.Visible = true
+	showPanel(panel)
 	if frame ~= panel and frame:IsA("GuiObject") then
 		frame.Visible = true
 	end

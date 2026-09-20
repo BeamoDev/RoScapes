@@ -33,6 +33,35 @@ local queueAutoAdvance
 local drawTutorialGuide
 local getTutorialTargetWord
 
+local function isCurrentTutorial(tutorialState, expectedStep)
+	return tutorialState ~= nil
+		and state.tutorialState == tutorialState
+		and tutorialState.active == true
+		and (expectedStep == nil or tutorialState.step == expectedStep)
+end
+
+local function hasCompletedTutorialWords(tutorialState)
+	local requiredCount = math.min(3, #(tutorialState.words or {}))
+	if requiredCount < 1 then
+		return false
+	end
+	for index = 1, requiredCount do
+		if not tutorialState.solvedWords[tutorialState.words[index]] then
+			return false
+		end
+	end
+	return true
+end
+
+local function findTutorialSkipButton(overlay)
+	for _, descendant in ipairs(overlay:GetDescendants()) do
+		if descendant:IsA("GuiButton") and string.find(string.lower(descendant.Name), "skip", 1, true) then
+			return descendant
+		end
+	end
+	return nil
+end
+
 local function getFallbackTutorialTargetWord()
 	local tutorialState = state.tutorialState
 	if not tutorialState or not tutorialState.active then
@@ -522,33 +551,44 @@ local function refreshTutorialWheelState()
 end
 
 queueAutoAdvance = function(expectedStep, delaySeconds, nextStep)
+	local tutorialState = state.tutorialState
 	task.delay(delaySeconds, function()
-		if state.tutorialState and state.tutorialState.active and state.tutorialState.step == expectedStep then
+		if isCurrentTutorial(tutorialState, expectedStep) then
 			setTutorialStep(nextStep)
 		end
 	end)
 end
 
-local function finishTutorialToLobby()
+local function finishTutorialToLobby(skipCelebration)
 	local tutorialState = state.tutorialState
-	if not tutorialState then
+	if not tutorialState or tutorialState.completionStarted then
 		return
 	end
+	tutorialState.completionStarted = true
 	state.tutorialCompleted = true
-	state.RemoteRegistry:GetFunction("MarkTutorialComplete"):InvokeServer()
+	pcall(function()
+		state.RemoteRegistry:GetFunction("MarkTutorialComplete"):InvokeServer()
+	end)
 	ClientBridge.Call("OnTutorialCompletedClient")
 	TutorialController.Cancel()
 	state.InputState:SetEnabled(false)
-	state.GameBoard:ExitLevel()
-	state.LevelSelect:ShowPackList()
-	state.applyLobbyScenary()
-	state.UIManager:ShowScreen("HomeScreen")
-	if state.forceTesting then
-		task.delay(0.2, function()
-			state.GroupRewardPanel.Open(true)
-		end)
+	local function showLobby()
+		state.GameBoard:ExitLevel()
+		state.LevelSelect:ShowPackList()
+		state.applyLobbyScenary()
+		state.UIManager:ShowScreen("HomeScreen")
+		if state.forceTesting then
+			task.delay(0.2, function()
+				state.GroupRewardPanel.Open(true)
+			end)
+		else
+			state.GroupRewardPanel.Schedule(1.25)
+		end
+	end
+	if skipCelebration and state.animateGameHudOut then
+		state.animateGameHudOut(showLobby)
 	else
-		state.GroupRewardPanel.Schedule(1.25)
+		showLobby()
 	end
 end
 
@@ -569,16 +609,18 @@ local function finishTutorialCelebration()
 	setTutorialUiVisible(true, 0.35)
 	tweenTutorialFrame(UDim2.fromScale(0.5, 0.5), nil, 1, nil)
 	playFinishConfetti()
+	local finishingState = tutorialState
 	task.delay(2.4, function()
-		if state.tutorialState and state.tutorialState.active and state.tutorialState.step == 8 then
+		if isCurrentTutorial(finishingState, 8) then
 			finishTutorialToLobby()
 		end
 	end)
 end
 
 local function focusTutorialAction(expectedStep, framePosition, spotlightPoint, onFocused)
+	local tutorialState = state.tutorialState
 	task.delay(TUTORIAL_ACTION_FOCUS_DELAY, function()
-		if not (state.tutorialState and state.tutorialState.active and state.tutorialState.step == expectedStep) then
+		if not isCurrentTutorial(tutorialState, expectedStep) then
 			return
 		end
 		tweenTutorialFrame(framePosition, spotlightPoint, 0.28, nil)
@@ -591,6 +633,9 @@ end
 setTutorialStep = function(step)
 	local tutorialState = state.tutorialState
 	if not tutorialState or not tutorialState.active then
+		return
+	end
+	if step == 8 and not hasCompletedTutorialWords(tutorialState) then
 		return
 	end
 	tutorialState.step = step
@@ -792,6 +837,7 @@ function TutorialController.Begin(level)
 	local stepDesc = tutorialFrame and (tutorialFrame:FindFirstChild("Subtitle") or tutorialFrame:FindFirstChild("Subtiel"))
 	local progressBar = tutorialFrame and tutorialFrame:FindFirstChild("ProgressBar")
 	local stepFill = progressBar and progressBar:FindFirstChild("Fill")
+	local skipButton = findTutorialSkipButton(overlay)
 
 	local wheelRoot = state.gameScreen:FindFirstChild("WheelRoot")
 	local guideLayer = nil
@@ -835,8 +881,15 @@ function TutorialController.Begin(level)
 		step = 0,
 		guideToken = 0,
 		buttonStates = {},
+		completionStarted = false,
 		defaultSpotlightSize = spotlight and spotlight.Size or nil,
 	}
+	if skipButton and skipButton:IsA("GuiButton") and not skipButton:GetAttribute("TutorialSkipWired") then
+		skipButton:SetAttribute("TutorialSkipWired", true)
+		skipButton.MouseButton1Click:Connect(function()
+			TutorialController.Skip()
+		end)
+	end
 
 	if spotlight and spotlight:IsA("ImageLabel") then
 		spotlight.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -874,38 +927,55 @@ function TutorialController.OnWordFound(result)
 	if result.isBonus then
 		return
 	end
+	local tutorialState = state.tutorialState
 	local foundWord = tostring(result.word or ""):upper()
-	if foundWord ~= "" then
-		state.tutorialState.solvedWords[foundWord] = true
+	local expectedWord = getTutorialTargetWord()
+	if foundWord == "" or expectedWord == nil or foundWord ~= expectedWord then
+		return
 	end
-	state.tutorialState.guideToken = (state.tutorialState.guideToken or 0) + 1
+	tutorialState.solvedWords[foundWord] = true
+	tutorialState.guideToken = (tutorialState.guideToken or 0) + 1
 	clearTutorialLines()
-	if state.tutorialState.pointer then
-		state.tutorialState.pointer.Visible = false
+	if tutorialState.pointer then
+		tutorialState.pointer.Visible = false
 	end
-	if state.tutorialState.step == 2 then
+	if tutorialState.step == 2 then
 		task.delay(1.9, function()
-			if state.tutorialState and state.tutorialState.active and state.tutorialState.step == 2 then
+			if isCurrentTutorial(tutorialState, 2) then
 				setTutorialStep(3)
 			end
 		end)
-	elseif state.tutorialState.step == 6 then
+	elseif tutorialState.step == 6 then
 		task.delay(1.9, function()
-			if state.tutorialState and state.tutorialState.active and state.tutorialState.step == 6 then
-				setTutorialStep(7)
+			if isCurrentTutorial(tutorialState, 6) then
+				if hasCompletedTutorialWords(tutorialState) then
+					setTutorialStep(8)
+				else
+					setTutorialStep(7)
+				end
 			end
 		end)
-	elseif state.tutorialState.step == 7 then
+	elseif tutorialState.step == 7 then
 		task.delay(1.9, function()
-			if state.tutorialState and state.tutorialState.active and state.tutorialState.step == 7 then
+			if isCurrentTutorial(tutorialState, 7) and hasCompletedTutorialWords(tutorialState) then
 				setTutorialStep(8)
 			end
 		end)
 	end
 end
 
+function TutorialController.Skip()
+	local tutorialState = state.tutorialState
+	if not tutorialState or not tutorialState.active or tutorialState.completionStarted then
+		return false
+	end
+	finishTutorialToLobby(true)
+	return true
+end
+
 function TutorialController.OnHintUsed(info)
 	if state.tutorialState and state.tutorialState.active and state.tutorialState.step == 3 and info and info.mode == "hint" then
+		local tutorialState = state.tutorialState
 		local hintInfo = resolveTutorialHintInfo(info)
 		if not hintInfo then
 			return
@@ -922,16 +992,16 @@ function TutorialController.OnHintUsed(info)
 		}
 		setTutorialStep(4)
 		task.delay(TUTORIAL_HINT_REVEAL_DELAY, function()
-			if not (state.tutorialState and state.tutorialState.active and state.tutorialState.step == 4) then
+			if not isCurrentTutorial(tutorialState, 4) then
 				return
 			end
-			local pendingHintInfo = state.tutorialState.pendingHintInfo
+			local pendingHintInfo = tutorialState.pendingHintInfo
 			if pendingHintInfo and state.GameBoard and state.GameBoard.RevealHintCell then
 				state.GameBoard:RevealHintCell(pendingHintInfo)
 			end
 		end)
 		task.delay(TUTORIAL_HINT_STEP_ADVANCE_DELAY, function()
-			if state.tutorialState and state.tutorialState.active and state.tutorialState.step == 4 then
+			if isCurrentTutorial(tutorialState, 4) then
 				setTutorialStep(5)
 			end
 		end)
@@ -947,7 +1017,11 @@ end
 function TutorialController.OnShuffleUsed()
 	if state.tutorialState and state.tutorialState.active and state.tutorialState.step == 5 then
 		refreshTutorialGuideNow()
-		setTutorialStep(6)
+		if hasCompletedTutorialWords(state.tutorialState) then
+			setTutorialStep(8)
+		else
+			setTutorialStep(6)
+		end
 	end
 end
 

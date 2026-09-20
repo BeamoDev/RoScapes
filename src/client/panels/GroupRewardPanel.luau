@@ -1,5 +1,6 @@
 local TweenService = game:GetService("TweenService")
 local GroupService = game:GetService("GroupService")
+local GuiMotion = require(script.Parent.Parent.ui.GuiMotion)
 
 local GroupRewardPanel = {}
 
@@ -30,6 +31,16 @@ local function ensurePanel()
 		return panel
 	end
 	return nil
+end
+
+local function hidePanel(panel)
+	local inner = panel and panel:FindFirstChild("Frame")
+	GuiMotion.Hide(panel, (inner and inner:IsA("GuiObject")) and inner or panel)
+end
+
+local function showPanel(panel)
+	local inner = panel and panel:FindFirstChild("Frame")
+	GuiMotion.Show(panel, (inner and inner:IsA("GuiObject")) and inner or panel)
 end
 
 local function isClaimed()
@@ -87,7 +98,7 @@ local function tryClaim(joinedViaPrompt)
 		state.playerData.hints = tonumber(resp.hints) or state.playerData.hints or 0
 		local panel = ensurePanel()
 		if panel then
-			panel.Visible = false
+			hidePanel(panel)
 			state.shakeToken += 1
 		end
 		state.UIManager:ShowAlert("Group reward given", "success")
@@ -153,7 +164,7 @@ function GroupRewardPanel.Open(forceShow)
 		panel:SetAttribute("Wired", true)
 		if closeBtn and closeBtn:IsA("GuiButton") then
 			closeBtn.MouseButton1Click:Connect(function()
-				panel.Visible = false
+				hidePanel(panel)
 				state.shakeToken += 1
 			end)
 		end
@@ -200,7 +211,7 @@ function GroupRewardPanel.Open(forceShow)
 		end
 	end
 
-	panel.Visible = true
+	showPanel(panel)
 	if frame ~= panel and frame:IsA("GuiObject") then
 		frame.Visible = true
 	end

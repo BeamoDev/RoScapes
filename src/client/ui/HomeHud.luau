@@ -1,5 +1,6 @@
 local TweenService = game:GetService("TweenService")
 local ClientBridge = require(script.Parent.Parent.core.ClientBridge)
+local CoinCounter = require(script.Parent.CoinCounter)
 
 local HomeHud = {}
 
@@ -352,33 +353,20 @@ function HomeHud.StartPlayButtonPulse()
 			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 			stroke.Parent = playBtn
 
-			local offset = Instance.new("Vector2Value")
-			offset.Name = "PlayPulseOffset"
-			offset.Value = Vector2.new(0, 0)
-			offset.Parent = stroke
-			local offsetConn = offset:GetPropertyChangedSignal("Value"):Connect(function()
-				stroke.BorderOffset = offset.Value
-			end)
-			stroke.BorderOffset = Vector2.new(0, 0)
+			stroke.BorderOffset = UDim.new(0, 0)
 
 			local tweenInfo = TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 			local thicknessTween = TweenService:Create(stroke, tweenInfo, {
 				Thickness = 6,
 				Transparency = 1,
 			})
-			local offsetTween = TweenService:Create(offset, tweenInfo, {
-				Value = Vector2.new(0.5, 0),
+			local offsetTween = TweenService:Create(stroke, tweenInfo, {
+				BorderOffset = UDim.new(0.5, 0),
 			})
 
 			thicknessTween:Play()
 			offsetTween:Play()
 			thicknessTween.Completed:Wait()
-			if offsetConn then
-				offsetConn:Disconnect()
-			end
-			if offset and offset.Parent then
-				offset:Destroy()
-			end
 			if stroke and stroke.Parent then
 				stroke:Destroy()
 			end
@@ -510,7 +498,7 @@ function HomeHud.UpdateCurrencyLabels(coins)
 		local currency = buttons and buttons:FindFirstChild("Currency")
 		local label = currency and currency:FindFirstChild("Label")
 		if label and label:IsA("TextLabel") then
-			label.Text = tostring(value)
+			CoinCounter.Set(label, value)
 		end
 	end
 	updateCurrencyLabel(state.homeScreen)

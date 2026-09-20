@@ -2671,6 +2671,7 @@ end
 
 cancelOnboardingTutorial = function()
 	tutorialToken += 1
+	tutorialSessionActive = false
 	TutorialController.Cancel()
 end
 
@@ -3621,7 +3622,6 @@ task.delay(0.2, function()
 	if not data then
 		return
 	end
-	tutorialSessionActive = true
 	isDailyPuzzleMode = false
 	isTimedMode = false
 	stopTimedModeTimer()
