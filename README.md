@@ -37,7 +37,7 @@ Set the URLs privately and copy the module alongside `ModerationConfig` in the s
 
 ## Checks
 
-With Selene installed, run `selene src`. The initial review used Selene 0.31.0 with the existing `selene.toml`; it reports zero errors, zero parse errors, and 145 warnings after the fixes. Warnings still cause a nonzero exit code. Gameplay and UI verification require the existing place in Studio.
+With Selene installed, run `selene src`. After restoring the original animations at the owner's request, Selene 0.31.0 reports one error, zero parse errors, and 145 warnings. The error is the original Play-button animation's `Instance.new("Vector2Value")` call. Gameplay and UI verification require the existing place in Studio.
 
 ## Git
 

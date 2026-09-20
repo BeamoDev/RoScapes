@@ -1254,6 +1254,10 @@ local function startPlayButtonPulse()
 	HomeHud.StartPlayButtonPulse()
 end
 
+local function startHintButtonPulse()
+	HomeHud.StartHintButtonPulse()
+end
+
 local function shakeButtonOnce(button)
 	HomeHud.ShakeButtonOnce(button)
 end
@@ -1290,6 +1294,7 @@ end
 ClientBridge.SetCallback("OnCoinsUpdated", updateCurrencyLabels)
 updateBonusWordsCounter()
 startPlayButtonPulse()
+startHintButtonPulse()
 updateAssistButtonNotifications()
 ClientBridge.SetCallback("OnSelectionHintsUpdated", function(tokens)
 	updateSelectionHintDisplays(tokens)

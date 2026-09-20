@@ -1,5 +1,11 @@
 # Initial source review
 
+## Current animation state
+
+The owner subsequently requested the original hint button and animations back. `HomeHud.luau` and the hint pulse startup have been restored to their imported versions. This restores both the repeating hint animation and the original Play-button animation, including its known `Vector2Value` error. The other fixes below remain in place.
+
+The initial review and checklist below describe the earlier change. After the restoration, the hint should again grow, wiggle, and flash during ordinary play. Current Selene results are 1 error, 145 warnings, and 0 parse errors; the single error is the restored Play-button code. Studio gameplay has not been run.
+
 ## Player report: hint button keeps jumping
 
 The complaint describes a deliberate attention animation in `HomeHud.StartHintButtonPulse`. After a 3.2-second delay it enlarged the button's scale by 10%, rotated it between +4 and -4 degrees, and flashed a green outline. The animation and its extra wait made it repeat roughly every 4.8 seconds while the button was on screen, outside the tutorial.

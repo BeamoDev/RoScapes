@@ -1,4 +1,5 @@
 local TweenService = game:GetService("TweenService")
+local ClientBridge = require(script.Parent.Parent.core.ClientBridge)
 
 local HomeHud = {}
 
@@ -21,6 +22,34 @@ local state = {
 	playerData = nil,
 	uiState = nil,
 }
+
+local function isGuiObjectOnScreen(guiObject, container)
+	if not (guiObject and guiObject:IsA("GuiObject") and guiObject.Visible) then
+		return false
+	end
+	if not (container and container:IsA("GuiObject") and container.Visible) then
+		return false
+	end
+	local pos = guiObject.AbsolutePosition
+	local size = guiObject.AbsoluteSize
+	local containerPos = container.AbsolutePosition
+	local containerSize = container.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 or containerSize.X <= 0 or containerSize.Y <= 0 then
+		return false
+	end
+	local guiLeft = pos.X
+	local guiTop = pos.Y
+	local guiRight = pos.X + size.X
+	local guiBottom = pos.Y + size.Y
+	local containerLeft = containerPos.X
+	local containerTop = containerPos.Y
+	local containerRight = containerPos.X + containerSize.X
+	local containerBottom = containerPos.Y + containerSize.Y
+	return guiRight > containerLeft
+		and guiLeft < containerRight
+		and guiBottom > containerTop
+		and guiTop < containerBottom
+end
 
 local function getHomeButtonByNames(names)
 	local homeScreen = state.homeScreen
@@ -323,20 +352,124 @@ function HomeHud.StartPlayButtonPulse()
 			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 			stroke.Parent = playBtn
 
-			stroke.BorderOffset = UDim.new(0, 0)
+			local offset = Instance.new("Vector2Value")
+			offset.Name = "PlayPulseOffset"
+			offset.Value = Vector2.new(0, 0)
+			offset.Parent = stroke
+			local offsetConn = offset:GetPropertyChangedSignal("Value"):Connect(function()
+				stroke.BorderOffset = offset.Value
+			end)
+			stroke.BorderOffset = Vector2.new(0, 0)
 
 			local tweenInfo = TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 			local thicknessTween = TweenService:Create(stroke, tweenInfo, {
 				Thickness = 6,
 				Transparency = 1,
-				BorderOffset = UDim.new(0.5, 0),
+			})
+			local offsetTween = TweenService:Create(offset, tweenInfo, {
+				Value = Vector2.new(0.5, 0),
 			})
 
 			thicknessTween:Play()
+			offsetTween:Play()
 			thicknessTween.Completed:Wait()
+			if offsetConn then
+				offsetConn:Disconnect()
+			end
+			if offset and offset.Parent then
+				offset:Destroy()
+			end
 			if stroke and stroke.Parent then
 				stroke:Destroy()
 			end
+		end
+	end)
+end
+
+function HomeHud.StartHintButtonPulse()
+	task.spawn(function()
+		local gameScreen = state.gameScreen
+		while not gameScreen or not gameScreen.Parent do
+			gameScreen = state.gameScreen
+			task.wait(0.5)
+		end
+		while gameScreen.Parent do
+			local gameButtons = state.gameButtons or gameScreen:FindFirstChild("Buttons")
+			local hintBtn = gameButtons and gameButtons:FindFirstChild("Hint")
+			if not hintBtn or not hintBtn:IsA("GuiButton") then
+				task.wait(1)
+				continue
+			end
+			if ClientBridge.Call("IsTutorialActive") then
+				task.wait(0.5)
+				continue
+			end
+			if not isGuiObjectOnScreen(hintBtn, gameScreen) then
+				task.wait(0.5)
+				continue
+			end
+
+			local baseRotation = hintBtn.Rotation
+			local baseSize = hintBtn.Size
+			task.wait(3.2)
+			if not hintBtn.Parent then
+				break
+			end
+			if ClientBridge.Call("IsTutorialActive") or not isGuiObjectOnScreen(hintBtn, gameScreen) then
+				hintBtn.Rotation = baseRotation
+				hintBtn.Size = baseSize
+				continue
+			end
+
+			local stroke = hintBtn:FindFirstChild("HintPulseStroke")
+			if stroke then
+				stroke:Destroy()
+			end
+			stroke = Instance.new("UIStroke")
+			stroke.Name = "HintPulseStroke"
+			stroke.Color = Color3.fromRGB(88, 240, 135)
+			stroke.Thickness = 0
+			stroke.Transparency = 0.2
+			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			stroke.Parent = hintBtn
+
+			local shake1 = TweenService:Create(hintBtn, TweenInfo.new(0.14, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Rotation = baseRotation + 4,
+				Size = UDim2.new(baseSize.X.Scale * 1.1, baseSize.X.Offset, baseSize.Y.Scale * 1.1, baseSize.Y.Offset),
+			})
+			local shake2 = TweenService:Create(hintBtn, TweenInfo.new(0.14, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Rotation = baseRotation - 4,
+			})
+			local shake3 = TweenService:Create(hintBtn, TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				Rotation = baseRotation,
+				Size = baseSize,
+			})
+
+			local pulseInfo = TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+			local pulseTween = TweenService:Create(stroke, pulseInfo, {
+				Thickness = 6,
+				Transparency = 1,
+			})
+
+			shake1:Play()
+			pulseTween:Play()
+			shake1.Completed:Wait()
+			if not hintBtn.Parent then
+				break
+			end
+			shake2:Play()
+			shake2.Completed:Wait()
+			if not hintBtn.Parent then
+				break
+			end
+			shake3:Play()
+			pulseTween.Completed:Wait()
+			if stroke and stroke.Parent then
+				stroke:Destroy()
+			end
+			hintBtn.Rotation = baseRotation
+			hintBtn.Size = baseSize
+			task.wait(0.8)
 		end
 	end)
 end
