@@ -609,6 +609,29 @@ local function grantDailyCellHint(player)
 	return revealCellsToPlayer(player, session, levelData, { target }, "daily_hint")
 end
 
+local function isWordCell(levelData, row, col)
+	if not levelData or not levelData.positions then
+		return false
+	end
+	for _, pos in ipairs(levelData.positions) do
+		local word = pos.word
+		for i = 1, #word do
+			local r, c
+			if pos.dir == "H" then
+				r = pos.row
+				c = pos.col + (i - 1)
+			else
+				r = pos.row + (i - 1)
+				c = pos.col
+			end
+			if r == row and c == col then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 local function grantDailySelectedCellHint(player, row, col)
 	local session = GameService.GetSession(player.UserId)
 	if not session or tonumber(session.packId) ~= 0 then
@@ -791,29 +814,6 @@ local function startPvPMatch(playerA, playerB)
 		},
 	})
 	return true
-end
-
-local function isWordCell(levelData, row, col)
-	if not levelData or not levelData.positions then
-		return false
-	end
-	for _, pos in ipairs(levelData.positions) do
-		local word = pos.word
-		for i = 1, #word do
-			local r, c
-			if pos.dir == "H" then
-				r = pos.row
-				c = pos.col + (i - 1)
-			else
-				r = pos.row + (i - 1)
-				c = pos.col
-			end
-			if r == row and c == col then
-				return true
-			end
-		end
-	end
-	return false
 end
 
 local function areRequiredCellsFullyCovered(session, levelData)

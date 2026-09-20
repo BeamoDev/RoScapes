@@ -139,8 +139,6 @@ local function getWordTargetForLevel(globalLevelIndex, letterCount, skillAdjustm
 	local target = 0
 	if levelNumber == 5 then
 		target = 3
-	elseif levelNumber <= 15 then
-		target = 4
 	elseif levelNumber <= 25 then
 		target = 4
 	elseif levelNumber <= 35 then

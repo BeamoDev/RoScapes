@@ -375,6 +375,7 @@ local playBonusCoinFly = function() end
 local playBonusWordFly = function() end
 local FORCE_TUTORIAL_FOR_TESTING = false
 local tutorialShownThisSession = false
+local tutorialSessionActive = false
 local ADMIN_USER_IDS = {
 	[1790165114] = true,
 	[123315075] = true,
@@ -1253,10 +1254,6 @@ local function startPlayButtonPulse()
 	HomeHud.StartPlayButtonPulse()
 end
 
-local function startHintButtonPulse()
-	HomeHud.StartHintButtonPulse()
-end
-
 local function shakeButtonOnce(button)
 	HomeHud.ShakeButtonOnce(button)
 end
@@ -1293,7 +1290,6 @@ end
 ClientBridge.SetCallback("OnCoinsUpdated", updateCurrencyLabels)
 updateBonusWordsCounter()
 startPlayButtonPulse()
-startHintButtonPulse()
 updateAssistButtonNotifications()
 ClientBridge.SetCallback("OnSelectionHintsUpdated", function(tokens)
 	updateSelectionHintDisplays(tokens)
@@ -2640,7 +2636,6 @@ local function startTimedModeFromHome(modeKey)
 	ModeFlows.StartTimedModeFromHome(modeKey)
 end
 
-local tutorialSessionActive = false
 local function beginOnboardingTutorial(level)
 	if tutorialShownThisSession then
 		return

@@ -39,6 +39,7 @@ local WHEEL_CENTER_OFFSET = Vector2.new(0, 0)
 local pendingBuildToken = 0
 local WHEEL_LAYOUT_SETTLE_DELAY = 0.18
 local updateTutorialLetterAvailability
+local shuffleLetters
 
 -- Level color drives the line and selected letter tint.
 local COL_LETTER_NRM = Color3.fromRGB(0, 0, 0)
@@ -1241,7 +1242,7 @@ local function animateLettersOut(duration, destroyAfter)
 end
 
 -- Shuffle letters
-local function shuffleLetters(onComplete)
+shuffleLetters = function(onComplete)
 	if not InputState:IsEnabled() or not levelData or #letterBtns == 0 or isShuffling then return end
 	if ClientBridge.GetState("IsHardcoreMode") then
 		if uiMgr and uiMgr.ShowAlert then
