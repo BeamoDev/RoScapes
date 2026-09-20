@@ -15,6 +15,7 @@ local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local RemoteRegistry = require(ReplicatedStorage:WaitForChild("Shared").RemoteRegistry)
+local TutorialConfig = require(ReplicatedStorage:WaitForChild("Shared").TutorialConfig)
 local MonetizationConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MonetizationConfig"))
 local UIEffects = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("util"):WaitForChild("UIEffects"))
 local IntroLoader = require(script.Parent.bootstrap.IntroLoader)
@@ -396,6 +397,7 @@ local lastAchievementUnlockedSeen = nil
 local gameHudTargets = nil
 local GAME_HUD_TRANSITION_SLOWDOWN = 3
 local uiState = {
+	motion = require(script.Parent.ui.GuiMotion),
 	homeNotificationCounts = {
 		daily = 0,
 		quests = 0,
@@ -411,6 +413,16 @@ local uiState = {
 	renderPvPPanel = nil,
 	cachedDailyPuzzleInfo = nil,
 }
+uiState.panelMotionTarget = function(panel)
+	local inner = panel and panel:FindFirstChild("Frame")
+	return (inner and inner:IsA("GuiObject")) and inner or panel
+end
+uiState.showAnimatedPanel = function(panel)
+	uiState.motion.Show(panel, uiState.panelMotionTarget(panel))
+end
+uiState.hideAnimatedPanel = function(panel)
+	uiState.motion.Hide(panel, uiState.panelMotionTarget(panel))
+end
 local adminPanelCommandRows = {}
 local adminPanelCooldownEnds = {}
 local adminPanelCooldownTokens = {}
@@ -1115,16 +1127,20 @@ local function showLoadedGameScreen()
 	animateGameHudIn()
 end
 
-local function transitionFinishedGameToHome(onDone)
+local function transitionGameToLobbyScreen(screenName, onDone)
 	animateGameHudOut(function()
 		GameBoard:ExitLevel()
 		LevelSelect:ShowPackList()
 		applyLobbyScenary()
-		UIManager:ShowScreen("HomeScreen")
+		UIManager:ShowScreen(screenName)
 		if onDone then
 			onDone()
 		end
 	end)
+end
+
+local function transitionFinishedGameToHome(onDone)
+	transitionGameToLobbyScreen("HomeScreen", onDone)
 end
 
 local function getHomeButtonByNames(names)
@@ -1479,6 +1495,7 @@ TutorialController.Init({
 	applyLobbyScenary = applyLobbyScenary,
 	animateGameHudOut = animateGameHudOut,
 	forceTesting = FORCE_TUTORIAL_FOR_TESTING,
+	forceReplay = TutorialConfig.ShouldReplayForUserId(player.UserId),
 	tutorialCompleted = tutorialCompleted,
 })
 
@@ -1634,13 +1651,13 @@ local function openAdminPlayerPicker(actionDef)
 	if not (panel and playerFrame and playerScroll and playerTemplate) then
 		return
 	end
-	playerFrame.Visible = true
+	uiState.showAnimatedPanel(playerFrame)
 
 	local closeBtn = playerFrame:FindFirstChild("Close")
 	if closeBtn and closeBtn:IsA("GuiButton") and not closeBtn:GetAttribute("Wired") then
 		closeBtn:SetAttribute("Wired", true)
 		closeBtn.MouseButton1Click:Connect(function()
-			playerFrame.Visible = false
+			uiState.hideAnimatedPanel(playerFrame)
 		end)
 	end
 
@@ -1672,7 +1689,7 @@ local function openAdminPlayerPicker(actionDef)
 				actionBtn.AutoButtonColor = false
 				local result = RemoteRegistry:GetFunction("RunAdminAction"):InvokeServer(actionDef.key, info.userId)
 				if result and result.success then
-					playerFrame.Visible = false
+					uiState.hideAnimatedPanel(playerFrame)
 					startAdminCommandCooldown(actionDef.key, result.cooldownRemaining or 30)
 					UIManager:ShowAlert((result.message or "Done") .. " -> " .. tostring(result.targetName or info.name or "Player"), "success")
 				else
@@ -1701,9 +1718,9 @@ local function openAdminPanel()
 	if closeBtn and closeBtn:IsA("GuiButton") and not closeBtn:GetAttribute("Wired") then
 		closeBtn:SetAttribute("Wired", true)
 		closeBtn.MouseButton1Click:Connect(function()
-			panel.Visible = false
+			uiState.hideAnimatedPanel(panel)
 			if playerFrame then
-				playerFrame.Visible = false
+				uiState.hideAnimatedPanel(playerFrame)
 			end
 		end)
 	end
@@ -1750,7 +1767,7 @@ local function openAdminPanel()
 		playerFrame.Visible = false
 	end
 	HomePanels.CloseAllPanels(panel)
-	panel.Visible = true
+	uiState.showAnimatedPanel(panel)
 end
 
 
@@ -2043,7 +2060,7 @@ local function bindInGameHintButton(gameButtonsRef, inGameBarRef)
 			for _, button in ipairs(hintSelectionPulseButtons) do
 				stopHintSelectionButtonPulse(button)
 			end
-			hintSelectionPanel.Visible = false
+			uiState.hideAnimatedPanel(hintSelectionPanel)
 		end
 	end
 
@@ -2092,8 +2109,7 @@ local function bindInGameHintButton(gameButtonsRef, inGameBarRef)
 		setHintSelectionDealLabel(hintSelectionCoinsRoot, activeHintSelectionConfig.coinCost)
 		setHintSelectionRobuxLabel(hintSelectionRobuxOneRoot, activeHintSelectionConfig.robuxOnePrice)
 		setHintSelectionRobuxLabel(hintSelectionRobuxTenRoot, activeHintSelectionConfig.robuxTenPrice)
-		closeHintSelection()
-		hintSelectionPanel.Visible = true
+		uiState.showAnimatedPanel(hintSelectionPanel)
 		if hintSelectionFrame and hintSelectionFrame:IsA("GuiObject") then
 			hintSelectionFrame.Visible = true
 		end
@@ -2235,17 +2251,14 @@ local function bindInGameButtons(gameScreenRef)
 				isDailyPuzzleMode = false
 				cancelOnboardingTutorial()
 				InputState:SetEnabled(false)
-				GameBoard:ExitLevel()
-				UIManager:ShowScreen("HomeScreen")
+				transitionGameToLobbyScreen("HomeScreen")
 				return
 			end
 			gameExitPending = true
 			isDailyPuzzleMode = false
 			cancelOnboardingTutorial()
 			InputState:SetEnabled(false)
-			GameBoard:ExitLevel()
-			LevelSelect:ShowPackList()
-			UIManager:ShowScreen("LevelSelect")
+			transitionGameToLobbyScreen("LevelSelect")
 		end)
 	end
 
@@ -2693,7 +2706,7 @@ uiState.ensurePvPFrame = function()
 			local closeBtn = pvpFrame:FindFirstChild("Close", true)
 			if closeBtn and closeBtn:IsA("GuiButton") then
 				closeBtn.MouseButton1Click:Connect(function()
-					pvpFrame.Visible = false
+					uiState.hideAnimatedPanel(pvpFrame)
 				end)
 			end
 		end
@@ -2975,7 +2988,7 @@ local function wireHomeScreen()
 			if panel then
 				uiState.renderPvPPanel()
 				HomePanels.CloseAllPanels(panel)
-				panel.Visible = true
+				uiState.showAnimatedPanel(panel)
 			end
 		end)
 	end
@@ -3133,7 +3146,7 @@ uiState.startPvPMatch = function(payload)
 	applyGameScenaryForPack(data.packId)
 	showLoadedGameScreen()
 	if pvpFrame then
-		pvpFrame.Visible = false
+		uiState.hideAnimatedPanel(pvpFrame)
 	end
 	UIManager:ShowAlert("1v1 started vs " .. tostring(oppName), "success")
 end
@@ -3154,23 +3167,21 @@ uiState.endPvPMatch = function(result)
 	if gameScreen and gameScreen:IsA("GuiObject") then
 		gameScreen.ClipsDescendants = true
 	end
-	GameBoard:ExitLevel()
-	LevelSelect:ShowPackList()
-	UIManager:ShowScreen("LevelSelect")
-
 	local outcome = result and result.result or "draw"
 	local reason = tostring(result and result.reason or "")
-	if outcome == "win" then
-		if reason == "opponent forfeited" then
-			UIManager:ShowAlert("1v1 win (opponent left)", "success")
+	transitionGameToLobbyScreen("LevelSelect", function()
+		if outcome == "win" then
+			if reason == "opponent forfeited" then
+				UIManager:ShowAlert("1v1 win (opponent left)", "success")
+			else
+				UIManager:ShowAlert("1v1 win", "success")
+			end
+		elseif outcome == "lose" then
+			UIManager:ShowAlert("1v1 lost", "error")
 		else
-			UIManager:ShowAlert("1v1 win", "success")
+			UIManager:ShowAlert("1v1 ended", "bonus")
 		end
-	elseif outcome == "lose" then
-		UIManager:ShowAlert("1v1 lost", "error")
-	else
-		UIManager:ShowAlert("1v1 ended", "bonus")
-	end
+	end)
 end
 
 RemoteRegistry:GetEvent("PvPInviteReceived").OnClientEvent:Connect(function(info)
@@ -3413,7 +3424,7 @@ if bonusWordsFrame then
 	uiState.bonusWordsCloseButton = (bonusWordsFrame:FindFirstChild("Frame") or bonusWordsFrame):FindFirstChild("Close")
 	if uiState.bonusWordsCloseButton and uiState.bonusWordsCloseButton:IsA("GuiButton") then
 		uiState.bonusWordsCloseButton.MouseButton1Click:Connect(function()
-			bonusWordsFrame.Visible = false
+			uiState.hideAnimatedPanel(bonusWordsFrame)
 		end)
 	end
 	bonusWordsFrame.Visible = false
@@ -3541,18 +3552,7 @@ ClientBridge.SetCallback("ExitToPackList", function()
 	if bonusWordsFrame then
 		bonusWordsFrame.Visible = false
 	end
-	GameBoard:ExitLevel()
-	local gameRoot = hud:FindFirstChild("Game") or hud:FindFirstChild("GameScreen")
-	local levelsRoot = hud:FindFirstChild("Levels") or hud:FindFirstChild("LevelSelect")
-	if gameRoot then
-		gameRoot.Visible = false
-	end
-	if levelsRoot then
-		levelsRoot.Visible = false
-	end
-	LevelSelect:ShowPackList()
-	applyLobbyScenary()
-	UIManager:ShowScreen("HomeScreen")
+	transitionGameToLobbyScreen("HomeScreen")
 end)
 
 introLoader.SetProgress(0.97, "Finalizing...")
@@ -3615,7 +3615,7 @@ task.delay(0.2, function()
 	if tutorialShownThisSession then
 		return
 	end
-	if tutorialCompleted and not FORCE_TUTORIAL_FOR_TESTING then
+	if not TutorialConfig.ShouldStart(tutorialCompleted, player.UserId, FORCE_TUTORIAL_FOR_TESTING) then
 		return
 	end
 	local data = uiState.findTutorialLevelData()

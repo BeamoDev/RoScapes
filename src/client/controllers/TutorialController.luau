@@ -15,6 +15,7 @@ local state = {
 	GroupRewardPanel = nil,
 	applyLobbyScenary = nil,
 	forceTesting = false,
+	forceReplay = false,
 	tutorialCompleted = false,
 	tutorialState = nil,
 	tutorialPathDuration = 3.8,
@@ -819,7 +820,7 @@ function TutorialController.Init(options)
 end
 
 function TutorialController.Begin(level)
-	if ((not state.forceTesting) and state.tutorialCompleted) or not level or state.tutorialState then
+	if ((not state.forceTesting) and (not state.forceReplay) and state.tutorialCompleted) or not level or state.tutorialState then
 		return false
 	end
 	local overlay = state.hud:FindFirstChild("TutorialOverlay")

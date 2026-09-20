@@ -345,11 +345,19 @@ function UIManager:ShowScreen(name)
 	end
 
 	if currentScreen and screens[currentScreen] then
-		GuiMotion.Hide(screens[currentScreen])
+		if currentScreen == "HomeScreen" or currentScreen == "LevelSelect" then
+			GuiMotion.HideFlow(screens[currentScreen])
+		else
+			GuiMotion.Hide(screens[currentScreen])
+		end
 	end
 
 	currentScreen = name
-	GuiMotion.Show(frame)
+	if name == "HomeScreen" or name == "LevelSelect" then
+		GuiMotion.ShowFlow(frame)
+	else
+		GuiMotion.Show(frame)
+	end
 
 	if onShowCallbacks[name] then
 		onShowCallbacks[name]()

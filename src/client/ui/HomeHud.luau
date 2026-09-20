@@ -1,6 +1,7 @@
 local TweenService = game:GetService("TweenService")
 local ClientBridge = require(script.Parent.Parent.core.ClientBridge)
 local CoinCounter = require(script.Parent.CoinCounter)
+local GuiMotion = require(script.Parent.GuiMotion)
 
 local HomeHud = {}
 
@@ -225,7 +226,8 @@ function HomeHud.ShowBonusWords(words)
 		return
 	end
 	renderBonusWords(words or {})
-	state.bonusWordsFrame.Visible = true
+	local inner = state.bonusWordsFrame:FindFirstChild("Frame")
+	GuiMotion.Show(state.bonusWordsFrame, (inner and inner:IsA("GuiObject")) and inner or state.bonusWordsFrame)
 end
 
 function HomeHud.UpdateHomeRankVisual(rankInfo)
