@@ -1,0 +1,16 @@
+# Private server configuration (never publish webhook credentials).
+src/server/services/ModerationWebhooksPrivate.luau
+.env
+.env.*
+!.env.example
+
+# Local tools, generated output, and Roblox place backups.
+.DS_Store
+Thumbs.db
+*.log
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+build/
+temp/
