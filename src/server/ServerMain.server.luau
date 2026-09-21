@@ -12,6 +12,7 @@ local Server = script.Parent
 
 -- Create all remotes FIRST
 local RemoteRegistry = require(ReplicatedStorage:WaitForChild("Shared").RemoteRegistry)
+local TutorialConfig = require(ReplicatedStorage:WaitForChild("Shared").TutorialConfig)
 RemoteRegistry.EnsureRemotes()
 
 -- Load services
@@ -190,6 +191,9 @@ end
 
 local function isNormalModeSession(player, session)
 	if not player or not session then
+		return false
+	end
+	if session.isTutorial == true then
 		return false
 	end
 	local packId = tonumber(session.packId) or 0
@@ -1039,7 +1043,7 @@ task.spawn(function()
 end)
 
 
-RemoteRegistry:GetFunction("GetLevelData").OnServerInvoke = function(player, packId, levelId, requestToken)
+RemoteRegistry:GetFunction("GetLevelData").OnServerInvoke = function(player, packId, levelId, requestToken, requestOptions)
 	local isStaleRequest, stalePayload = resolveStaleLevelDataRequest(player, requestToken)
 	if isStaleRequest then
 		return stalePayload
@@ -1052,13 +1056,18 @@ RemoteRegistry:GetFunction("GetLevelData").OnServerInvoke = function(player, pac
 	levelId = math.clamp(math.floor(levelId), 1, 999)
 	local skillState = DataService.getSkillState(player)
 	local savedNormalBoard = nil
+	local tutorialRequested = typeof(requestOptions) == "table" and requestOptions.tutorial == true
+	local tutorialSession = tutorialRequested
+		and TutorialConfig.ShouldStart(DataService.getTutorialCompleted(player), player.UserId, false)
 
 	local data, err
 	if packId == -1 then
 		data = FreeplayService.GetOrCreateBoard(player, DataService)
 	else
 		packId = math.clamp(packId, 1, 999)
-		savedNormalBoard = DataService.getSavedNormalModeBoard(player, packId, levelId)
+		if not tutorialSession then
+			savedNormalBoard = DataService.getSavedNormalModeBoard(player, packId, levelId)
+		end
 		if savedNormalBoard and savedNormalBoard.levelData then
 			data = savedNormalBoard.levelData
 		else
@@ -1081,6 +1090,9 @@ RemoteRegistry:GetFunction("GetLevelData").OnServerInvoke = function(player, pac
 	hardcoreRunByPlayer[player.UserId] = nil
 	startSessionWithBoardSavePolicy(player, data.packId, data.levelId, data)
 	local session = GameService.GetSession(player.UserId)
+	if session then
+		session.isTutorial = tutorialSession == true
+	end
 	local progressWords = {}
 	local progressBonus = {}
 	local hintedCells = {}
@@ -1107,6 +1119,7 @@ RemoteRegistry:GetFunction("GetLevelData").OnServerInvoke = function(player, pac
 	end
 
 	local payload = getClientLevelData(data)
+	payload.isTutorial = tutorialSession == true
 	payload.progressWords = progressWords
 	payload.progressBonus = progressBonus
 	payload.progressCells = LevelPayloadService.GetRevealCellsForWords(data, progressWords)
@@ -1586,12 +1599,15 @@ RemoteRegistry:GetEvent("SubmitWord").OnServerEvent:Connect(function(player, wor
 	end
 	
 	if valid then
+		local isTutorialSession = session.isTutorial == true
 		if isBonus then
 			GameService.RecordBonusWord(player, word)
 		else
 			GameService.RecordWord(player, word)
 		end
-		DataService.addWordFound(player, isBonus)
+		if not isTutorialSession then
+			DataService.addWordFound(player, isBonus)
+		end
 		
 		-- Keep streak for feel, but avoid inflating coin output off of it.
 		session.wordStreak = (session.wordStreak or 0) + 1
@@ -1599,25 +1615,27 @@ RemoteRegistry:GetEvent("SubmitWord").OnServerEvent:Connect(function(player, wor
 		local baseCoinReward = isBonus and 0 or 1
 		local coinReward = 0
 		local rankInfo = nil
-		if baseCoinReward > 0 then
+		if baseCoinReward > 0 and not isTutorialSession then
 			coinReward, rankInfo = applyRankedCoinReward(player, baseCoinReward)
 			DataService.addCoins(player, coinReward, "WordReward", "Reward")
 		end
-		addRankProgress(player, isBonus and 2 or 1, "word")
-		if coinReward > 0 then
-			DailyQuestService.RecordProgress(player, "coinsEarned", coinReward)
-		end
+		if not isTutorialSession then
+			addRankProgress(player, isBonus and 2 or 1, "word")
+			if coinReward > 0 then
+				DailyQuestService.RecordProgress(player, "coinsEarned", coinReward)
+			end
 			if isBonus then
 				DailyQuestService.RecordProgress(player, "bonusWords", 1)
 			else
 				DailyQuestService.RecordProgress(player, "wordsFound", 1)
 			end
-			if isNormalModeSession(player, session) then
-				DataService.saveNormalModeBoardSession(player, authLevelData, session)
-			end
-			
-			local revealedCells = nil
-			if not isBonus then
+		end
+		if isNormalModeSession(player, session) then
+			DataService.saveNormalModeBoardSession(player, authLevelData, session)
+		end
+
+		local revealedCells = nil
+		if not isBonus then
 			revealedCells = LevelPayloadService.GetRevealCells(authLevelData, word)
 		end
 		local filteredWord, wasFiltered, filteredCells = getFilteredWordPayload(player, word, revealedCells)
@@ -1633,6 +1651,9 @@ RemoteRegistry:GetEvent("SubmitWord").OnServerEvent:Connect(function(player, wor
 			wordStreak = session.wordStreak or 1,
 			streakMultiplier = streakMult,
 		})
+		if isTutorialSession then
+			return
+		end
 
 		local pvpMatch = getMatchForPlayer(player)
 		if pvpMatch and not pvpMatch.completed then
@@ -2600,6 +2621,10 @@ RemoteRegistry:GetFunction("ClaimGroupReward").OnServerInvoke = function(player,
 end
 
 RemoteRegistry:GetFunction("MarkTutorialComplete").OnServerInvoke = function(player)
+	local session = GameService.GetSession(player.UserId)
+	if session and session.isTutorial == true then
+		GameService.EndSession(player)
+	end
 	DataService.setTutorialCompleted(player, true)
 	task.spawn(function()
 		savePlayerDataGuarded(player, "mark tutorial complete", {

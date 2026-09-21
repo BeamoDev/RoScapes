@@ -333,17 +333,17 @@ GameHudTransitions.Init({
 })
 uiState.levelDataRequestToken = 0
 -- Ensures only the latest level request can update the active board on the client.
-uiState.requestLevelData = function(packId, levelId, fallbackPackId, fallbackLevelId)
+uiState.requestLevelData = function(packId, levelId, fallbackPackId, fallbackLevelId, requestOptions)
 	uiState.levelDataRequestToken += 1
 	local requestToken = uiState.levelDataRequestToken
 
-	local data = RemoteRegistry:GetFunction("GetLevelData"):InvokeServer(packId, levelId, requestToken)
+	local data = RemoteRegistry:GetFunction("GetLevelData"):InvokeServer(packId, levelId, requestToken, requestOptions)
 	if requestToken ~= uiState.levelDataRequestToken then
 		return nil, "stale"
 	end
 
 	if not data and fallbackPackId ~= nil and fallbackLevelId ~= nil then
-		data = RemoteRegistry:GetFunction("GetLevelData"):InvokeServer(fallbackPackId, fallbackLevelId, requestToken)
+		data = RemoteRegistry:GetFunction("GetLevelData"):InvokeServer(fallbackPackId, fallbackLevelId, requestToken, requestOptions)
 		if requestToken ~= uiState.levelDataRequestToken then
 			return nil, "stale"
 		end
@@ -3136,7 +3136,7 @@ task.spawn(function()
 end)
 
 uiState.findTutorialLevelData = function()
-	local data, requestStatus = uiState.requestLevelData(1, 5)
+	local data, requestStatus = uiState.requestLevelData(1, 5, nil, nil, { tutorial = true })
 	if requestStatus == "stale" then
 		return nil
 	end
