@@ -255,7 +255,6 @@ introLoader.SetProgress(0.9, "Building UI...")
 InputState:SetEnabled(false)
 
 UIManager:Init(playerGui, playerData)
-require(script.Parent.ui.ButtonFeedback).Init(hud)
 LevelSelect:Init(UIManager, playerData, hud)
 GameBoard:Init(UIManager, hud)
 LetterWheel:Init(UIManager, hud)

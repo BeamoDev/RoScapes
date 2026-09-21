@@ -379,7 +379,6 @@ test("changed server and client entrypoints compile", function()
 		"src/client/gameplay/LetterWheel.luau",
 		"src/client/effects/ClickBubble.luau",
 		"src/client/panels/AdminPanel.luau",
-		"src/client/ui/ButtonFeedback.luau",
 		"src/client/ui/GameHudTransitions.luau",
 		"src/client/ui/GuiMotion.luau",
 		"src/client/ui/UIManager.luau",
