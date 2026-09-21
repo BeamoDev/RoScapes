@@ -1144,10 +1144,20 @@ local function buildLetters(letters)
 	updateTutorialLetterAvailability()
 end
 
+local function cancelLetterTransition(btn)
+	for _, key in ipairs({ "layoutTween", "transitionSizeTween", "transitionLabelTween" }) do
+		if btn[key] then
+			btn[key]:Cancel()
+			btn[key] = nil
+		end
+	end
+end
+
 local function setLettersHiddenState()
 	transitionToken += 1
 	for _, btn in ipairs(letterBtns) do
 		if btn.frame and btn.frame.Parent then
+			cancelLetterTransition(btn)
 			btn.baseSize = btn.frame.Size
 			btn.frame.Visible = false
 			btn.frame.Size = UDim2.fromOffset(0, 0)
@@ -1166,6 +1176,7 @@ local function animateLettersIn(duration)
 	relayoutLetters()
 	for _, btn in ipairs(letterBtns) do
 		if btn.frame and btn.frame.Parent then
+			cancelLetterTransition(btn)
 			local targetSize = btn.baseSize or btn.frame.Size
 			btn.frame.Size = UDim2.fromOffset(0, 0)
 			btn.frame.Visible = true
@@ -1174,9 +1185,10 @@ local function animateLettersIn(duration)
 				btn.label.TextTransparency = 1
 			end
 
-			TweenService:Create(btn.frame, TweenInfo.new(tweenDuration, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			btn.transitionSizeTween = TweenService:Create(btn.frame, TweenInfo.new(tweenDuration, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 				Size = targetSize,
-			}):Play()
+			})
+			btn.transitionSizeTween:Play()
 
 			if btn.label then
 				task.delay(tweenDuration * 0.2, function()
@@ -1184,9 +1196,10 @@ local function animateLettersIn(duration)
 						return
 					end
 					if btn.label and btn.label.Parent then
-						TweenService:Create(btn.label, TweenInfo.new(tweenDuration * 0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+						btn.transitionLabelTween = TweenService:Create(btn.label, TweenInfo.new(tweenDuration * 0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 							TextTransparency = 0,
-						}):Play()
+						})
+						btn.transitionLabelTween:Play()
 					end
 				end)
 			end
@@ -1208,16 +1221,19 @@ local function animateLettersOut(duration, destroyAfter)
 	local framesToDestroy = {}
 	for _, btn in ipairs(letterBtns) do
 		if btn.frame and btn.frame.Parent then
+			cancelLetterTransition(btn)
 			table.insert(framesToDestroy, btn.frame)
 			btn.baseSize = btn.frame.Size
-			TweenService:Create(btn.frame, TweenInfo.new(tweenDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			btn.transitionSizeTween = TweenService:Create(btn.frame, TweenInfo.new(tweenDuration, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
 				Size = UDim2.fromOffset(0, 0),
 				BackgroundTransparency = 1,
-			}):Play()
+			})
+			btn.transitionSizeTween:Play()
 			if btn.label then
-				TweenService:Create(btn.label, TweenInfo.new(tweenDuration * 0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				btn.transitionLabelTween = TweenService:Create(btn.label, TweenInfo.new(tweenDuration * 0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
 					TextTransparency = 1,
-				}):Play()
+				})
+				btn.transitionLabelTween:Play()
 			end
 		end
 	end

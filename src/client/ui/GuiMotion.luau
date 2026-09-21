@@ -6,11 +6,11 @@ local flowByRoot = setmetatable({}, { __mode = "k" })
 local flowBaseByNode = setmetatable({}, { __mode = "k" })
 local scaleBaseByTarget = setmetatable({}, { __mode = "k" })
 
-local OPEN_INFO = TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-local CLOSE_INFO = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-local CLOSED_SCALE = 0.9
-local FLOW_DURATION = 0.42
-local FLOW_STAGGER = 0.045
+local OPEN_INFO = TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local CLOSE_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+local CLOSED_SCALE = 0.92
+local FLOW_DURATION = 0.36
+local FLOW_STAGGER = 0.035
 
 local function cancelActive(root)
 	local active = activeByRoot[root]
@@ -100,9 +100,9 @@ end
 local function getFlowPose(node, base)
 	local x = base.position.X.Scale
 	local y = base.position.Y.Scale
-	local dx = x < 0.34 and -0.1 or (x > 0.66 and 0.1 or 0)
-	local dy = y < 0.4 and -0.075 or (y > 0.62 and 0.1 or 0.065)
-	local scaleFactor = node:IsA("GuiButton") and 0.72 or 0.82
+	local dx = x < 0.34 and -0.065 or (x > 0.66 and 0.065 or 0)
+	local dy = y < 0.4 and -0.05 or (y > 0.62 and 0.07 or 0.045)
+	local scaleFactor = node:IsA("GuiButton") and 0.82 or 0.88
 	return base.position + UDim2.fromScale(dx, dy), base.scaleValue * scaleFactor
 end
 

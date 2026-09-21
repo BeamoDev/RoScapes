@@ -10,8 +10,26 @@ local state = {
 	positions = {},
 	sizes = {},
 	setExitPending = nil,
-	slowdown = 3,
+	slowdown = 1.45,
+	transitionToken = 0,
+	activeTweens = {},
 }
+
+local function beginTransition()
+	state.transitionToken += 1
+	for _, tween in ipairs(state.activeTweens) do
+		tween:Cancel()
+	end
+	state.activeTweens = {}
+	return state.transitionToken
+end
+
+local function playTween(instance, tweenInfo, goals)
+	local tween = TweenService:Create(instance, tweenInfo, goals)
+	table.insert(state.activeTweens, tween)
+	tween:Play()
+	return tween
+end
 
 local function targets()
 	if state.targets then
@@ -64,6 +82,7 @@ function GameHudTransitions.Init(options)
 end
 
 function GameHudTransitions.SetHidden()
+	beginTransition()
 	local hidden = hiddenPositions()
 	for key, gui in pairs(targets()) do
 		if gui and gui:IsA("GuiObject") and hidden[key] then
@@ -80,41 +99,37 @@ function GameHudTransitions.SetHidden()
 end
 
 function GameHudTransitions.AnimateIn()
+	beginTransition()
 	state.setExitPending(false)
 	for key, gui in pairs(targets()) do
 		local position = state.positions[key]
 		if gui and gui:IsA("GuiObject") and position then
 			if key == "wheelRoot" then
 				gui.Visible = true
-				TweenService
-					:Create(
-						gui,
-						TweenInfo.new(0.28 * state.slowdown, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-						{
-							Position = position,
-							Size = state.sizes[key] or gui.Size,
-						}
-					)
-					:Play()
+				playTween(
+					gui,
+					TweenInfo.new(0.28 * state.slowdown, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+					{
+						Position = position,
+						Size = state.sizes[key] or gui.Size,
+					}
+				)
 				if state.LetterWheel.AnimateLettersIn then
 					state.LetterWheel:AnimateLettersIn(0.28 * state.slowdown)
 				end
 			else
-				TweenService
-					:Create(
-						gui,
-						TweenInfo.new(0.32 * state.slowdown, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-						{
-							Position = position,
-						}
-					)
-					:Play()
+				playTween(
+					gui,
+					TweenInfo.new(0.32 * state.slowdown, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+					{ Position = position }
+				)
 			end
 		end
 	end
 end
 
 function GameHudTransitions.AnimateOut(onDone)
+	local token = beginTransition()
 	state.setExitPending(true)
 	local wheelDuration = 0.22 * state.slowdown
 	local uiDuration = 0.3 * state.slowdown
@@ -122,28 +137,26 @@ function GameHudTransitions.AnimateOut(onDone)
 	for key, gui in pairs(targets()) do
 		if gui and gui:IsA("GuiObject") then
 			if key == "wheelRoot" then
-				TweenService
-					:Create(gui, TweenInfo.new(wheelDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-						Size = UDim2.fromScale(0, 0),
-					})
-					:Play()
+				playTween(gui, TweenInfo.new(wheelDuration, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+					Size = UDim2.fromScale(0, 0),
+				})
 				if state.LetterWheel.AnimateLettersOut then
 					state.LetterWheel:AnimateLettersOut(wheelDuration, true)
 				end
 				task.delay(wheelDuration + 0.02, function()
-					if gui.Parent then
+					if state.transitionToken == token and gui.Parent then
 						gui.Visible = false
 					end
 				end)
 			elseif hidden[key] then
-				TweenService:Create(gui, TweenInfo.new(uiDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				playTween(gui, TweenInfo.new(uiDuration, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
 					Position = hidden[key],
-				}):Play()
+				})
 			end
 		end
 	end
 	task.delay(math.max(wheelDuration, uiDuration) + 0.04, function()
-		if onDone then
+		if state.transitionToken == token and onDone then
 			onDone()
 		end
 	end)

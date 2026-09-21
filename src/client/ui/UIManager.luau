@@ -135,13 +135,32 @@ local function makeOverlay(zBase)
 end
 
 local function popInPanel(panel, targetSize, targetPos)
-	panel.Size     = UDim2.fromOffset(0, 0)
-	panel.Position = UDim2.fromScale(0.5, 0.5)
-	TweenService:Create(panel,
-		TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Size     = targetSize,
-			Position = targetPos,
+	panel.Size = targetSize
+	panel.Position = targetPos
+	panel.Visible = false
+	local overlay = panel.Parent
+	if overlay and overlay:IsA("GuiObject") then
+		local targetTransparency = overlay.BackgroundTransparency
+		overlay.BackgroundTransparency = 1
+		TweenService:Create(overlay, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = targetTransparency,
 		}):Play()
+	end
+	GuiMotion.Show(panel, panel)
+end
+
+local function closeOverlay(panel, overlay)
+	if not (panel and panel.Parent and overlay and overlay.Parent) then
+		return
+	end
+	TweenService:Create(overlay, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		BackgroundTransparency = 1,
+	}):Play()
+	GuiMotion.Hide(panel, panel, function()
+		if overlay.Parent then
+			overlay:Destroy()
+		end
+	end)
 end
 
 local function closeButton(parent, zIdx, onClose)
@@ -185,7 +204,7 @@ function UIManager:ShowLeaderboard()
 	}).ZIndex = 52
 
 	closeButton(panel, 52, function()
-		overlay:Destroy()
+		closeOverlay(panel, overlay)
 	end)
 
 	-- Loading
@@ -675,7 +694,7 @@ function UIManager:ShowHintShop()
 	})
 	close.ZIndex = 72
 	close.MouseButton1Click:Connect(function()
-		overlay:Destroy()
+		closeOverlay(panel, overlay)
 	end)
 
 	local statusCard = makeFrame("StatusCard", panel, {
@@ -1028,7 +1047,7 @@ function UIManager:ShowStats()
 	})
 	close.ZIndex = 72
 	close.MouseButton1Click:Connect(function()
-		overlay:Destroy()
+		closeOverlay(panel, overlay)
 	end)
 
 	local scroll = Instance.new("ScrollingFrame")
@@ -1157,7 +1176,7 @@ function UIManager:ShowAchievements()
 	})
 	close.ZIndex = 72
 	close.MouseButton1Click:Connect(function()
-		overlay:Destroy()
+		closeOverlay(panel, overlay)
 	end)
 
 	local scroll = Instance.new("ScrollingFrame")

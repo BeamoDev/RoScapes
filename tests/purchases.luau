@@ -376,9 +376,13 @@ test("changed server and client entrypoints compile", function()
 		"src/server/services/DataService.luau",
 		"src/client/ClientMain.local.luau",
 		"src/client/gameplay/ModeFlows.luau",
+		"src/client/gameplay/LetterWheel.luau",
 		"src/client/effects/ClickBubble.luau",
 		"src/client/panels/AdminPanel.luau",
+		"src/client/ui/ButtonFeedback.luau",
 		"src/client/ui/GameHudTransitions.luau",
+		"src/client/ui/GuiMotion.luau",
+		"src/client/ui/UIManager.luau",
 	}) do
 		assert(luau.compile(fs.readFile(path)))
 	end
